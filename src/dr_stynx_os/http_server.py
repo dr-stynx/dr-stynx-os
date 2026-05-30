@@ -27,6 +27,142 @@ def save_state(state):
     with open(STATE_FILE, 'w') as f:
         json.dump(state, f, indent=2)
 
+class JSONRPC2Handler(BaseHTTPRequestHandler):
+    def log_message(self, format, *args):
+        print(f"[JSON-RPC HTTP] {format % args}")
+    
+    def do_OPTIONS(self):
+        """Handle CORS preflight requests"""
+        origin = self.headers.get('Origin', '*')
+        self.send_response(200)
+        self.send_header('Access-Control-Allow-Origin', origin)
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, DELETE')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        self.end_headers()
+    
+    def _send_error(self, status, error_response):
+        self.send_response(status)
+        self.send_header('Content-Type', 'application/json')
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.end_headers()
+        self.wfile.write(json.dumps(error_response).encode())
+    
+    def _send_json(self, data, status=200):
+        self.send_response(status)
+        self.send_header('Content-Type', 'application/json')
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.end_headers()
+        self.wfile.write(json.dumps(data).encode())
+    
+    def do_GET(self):
+        parsed = urlparse(self.path)
+        path = parsed.path.rstrip('/') or '/'
+        
+        if path == '/health':
+            state = load_state()
+            self._send_json({"status": "ok", "heartbeat_count": state.get("heartbeat_count", 0)})
+        
+        elif path == '/gpu' or path == '/gpu/status':
+            import subprocess
+            try:
+                result = subprocess.run(
+                    ["nvidia-smi", "--query-gpu=name,index,temperature.gpu,memory.total,memory.used,utilization.gpu", "--format=csv,noheader"],
+                    capture_output=True, text=True, timeout=5
+                )
+                
+                gpus = []
+                for line in [l.strip() for l in result.stdout.strip().split("\n") if l.strip()]:
+                    parts = [p.strip() for p in line.split(",")]
+                    if len(parts) >= 6:
+                        gpus.append({
+                            "id": int(parts[0]),
+                            "name": parts[1],
+                            "temp_c": int(parts[2]),
+                            "mem_total_mb": float(parts[3].replace("MiB", "").strip()) or 0,
+                            "mem_used_mb": float(parts[4].replace("MiB", "").strip()) or 0,
+                            "gpu_util_percent": float(parts[5].rstrip("%")) or 0
+                        })
+                
+                self._send_json({"gpus": gpus, "count": len(gpus)})
+            except Exception as e:
+                self._send_error(400, {"jsonrpc": "2.0", "error": {"code": -32600, "message": str(e)}, "id": None})
+        
+        elif path == '/state':
+            state = load_state()
+            self._send_json(state)
+        
+        elif path == '/tasks':
+            state = load_state()
+            self._send_json({"tasks": state.get("tasks", []), "count": len(state.get("tasks", []))})
+        
+        elif path == '/heartbeat':
+            import time
+            state = load_state()
+            state["heartbeat_count"] = state.get("heartbeat_count", 0) + 1
+            state["last_heartbeat"] = time.strftime("%Y-%m-%d %H:%M:%S")
+            save_state(state)
+            self._send_json({"status": "healthy", "heartbeat_count": state["heartbeat_count"], "last_heartbeat": state.get("last_heartbeat")})
+        
+        else:
+            self._send_error(404, {"jsonrpc": "2.0", "error": {"code": -32601, "message": "Method not found"}, "id": None})
+    
+    def do_POST(self):
+        parsed = urlparse(self.path)
+        path = parsed.path.rstrip('/') or '/'
+        
+        content_length = int(self.headers.get('Content-Length', 0))
+        body = self.rfile.read(content_length).decode() if content_length > 0 else '{}'
+        
+        try:
+            data = json.loads(body) if body else {}
+        except:
+            data = {}
+        
+        if path == '/tasks' or path == '/task':
+            if 'description' in data and 'priority' in data:
+                state = load_state()
+                if "tasks" not in state:
+                    state["tasks"] = []
+                
+                task = {
+                    "id": len(state.get("tasks", [])) + 1,
+                    "description": data['description'],
+                    "priority": data['priority'],
+                    "status": "pending",
+                    "created_at": time.strftime("%Y-%m-%d %H:%M:%S")
+                }
+                state["tasks"].append(task)
+                save_state(state)
+                
+                self._send_json({"task_id": task["id"], "message": f"Task added: {data['description']}"})
+            else:
+                self._send_error(400, {"jsonrpc": "2.0", "error": {"code": -32700, "message": "Invalid request parameters"}, "id": None})
+        
+        elif path == '/heartbeat':
+            import time
+            state = load_state()
+            state["heartbeat_count"] = state.get("heartbeat_count", 0) + 1
+            state["last_heartbeat"] = time.strftime("%Y-%m-%d %H:%M:%S")
+            save_state(state)
+            
+            self._send_json({"status": "healthy", "heartbeat_count": state["heartbeat_count"], "last_heartbeat": state.get("last_heartbeat")})
+        
+        else:
+            self._send_error(404, {"jsonrpc": "2.0", "error": {"code": -32601, "message": "Method not found"}, "id": None})
+    
+    def do_DELETE(self):
+        parsed = urlparse(self.path)
+        path = parsed.path.rstrip('/') or '/'
+        
+        if path == '/tasks' or path == '/task/clear':
+            state = load_state()
+            state["tasks"] = []
+            save_state(state)
+            self._send_json({"message": "All tasks cleared"})
+        
+        else:
+            self._send_error(404, {"jsonrpc": "2.0", "error": {"code": -32601, "message": "Method not found"}, "id": None})
+
 def load_tasks():
     state = load_state()
     return state.get("tasks", [])
@@ -51,150 +187,6 @@ def clear_tasks():
     state = load_state()
     state["tasks"] = []
     save_state(state)
-
-class JSONRPC2Handler(BaseHTTPRequestHandler):
-    def log_message(self, format, *args):
-        print(f"[JSON-RPC HTTP] {format % args}")
-    
-    def do_POST(self):
-        parsed = urlparse(self.path)
-        
-        content_length = int(self.headers.get('Content-Length', 0))
-        body = self.rfile.read(content_length).decode() if content_length > 0 else '{}'
-        
-        try:
-            rpc = json.loads(body) if body else {"jsonrpc": "2.0", "method": "", "params": {}}
-        except:
-            rpc = {"jsonrpc": "2.0", "method": "", "params": {}, "id": None}
-        
-        # Validate JSON-RPC 2.0 structure
-        if "jsonrpc" not in rpc or rpc["jsonrpc"] != "2.0":
-            self._send_error(400, {"jsonrpc": "2.0", "error": {"code": -32700, "message": "Invalid JSON-RPC Version"}, "id": rpc.get("id")})
-            return
-        
-        method = rpc.get("method", "")
-        params = rpc.get("params", {})
-        notification = isinstance(rpc.get('notification'), bool) or rpc.get('method') == '' and not 'jsonrpc' in rpc
-        request_id = rpc.get("id") if not notification else None
-        
-        try:
-            # Route JSON-RPC method calls
-            if method == "health":
-                state = load_state()
-                result = {"status": "ok", "heartbeat_count": state.get("heartbeat_count", 0), "version": "1.0.0"}
-            
-            elif method == "gpu.status":
-                import subprocess
-                try:
-                    result = subprocess.run(
-                        ["nvidia-smi", "--query-gpu=name,index,temperature.gpu,memory.total,memory.used,utilization.gpu", "--format=csv,noheader"],
-                        capture_output=True, text=True, timeout=5
-                    )
-                    gpus = []
-                    for line in [l.strip() for l in result.stdout.strip().split("\n") if l.strip()]:
-                        parts = [p.strip() for p in line.split(",")]
-                        if len(parts) >= 6:
-                            gpus.append({
-                                "id": int(parts[0]),
-                                "name": parts[1],
-                                "temp_c": int(parts[2]),
-                                "mem_total_mb": float(parts[3].replace("MiB", "").strip()) or 0,
-                                "mem_used_mb": float(parts[4].replace("MiB", "").strip()) or 0,
-                                "gpu_util_percent": float(parts[5].rstrip("%")) or 0
-                            })
-                    result = {"gpus": gpus, "count": len(gpus)}
-                except Exception as e:
-                    result = {"error": str(e)}
-            
-            elif method == "state.get":
-                result = load_state()
-            
-            elif method in ["task.add", "tasks.add"]:
-                if not isinstance(params, dict):
-                    params = {}
-                description = params.get("description") or params.get("d")
-                priority = params.get("priority", "low") or params.get("p")
-                
-                if description:
-                    task = add_task(description, priority)
-                    result = {"id": task["id"], "status": "success", "message": f"Task added: {description}"}
-                else:
-                    result = {"error": "Missing description parameter"}
-            
-            elif method in ["task.clear", "tasks.clear"]:
-                clear_tasks()
-                result = {"id": None, "status": "success", "message": "All tasks cleared"}
-            
-            elif method == "heartbeat":
-                state = load_state()
-                state["heartbeat_count"] = state.get("heartbeat_count", 0) + 1
-                state["last_heartbeat"] = time.strftime("%Y-%m-%d %H:%M:%S")
-                state["status"] = "active"
-                save_state(state)
-                result = {
-                    "id": None,
-                    "status": "ok", 
-                    "heartbeat_count": state["heartbeat_count"],
-                    "last_heartbeat": state.get("last_heartbeat"),
-                    "timestamp": time.time()
-                }
-            
-            elif method == "task.list" or method == "tasks.list":
-                tasks = load_tasks()
-                result = {"tasks": tasks, "count": len(tasks)}
-            
-            else:
-                result = {"error": f"Unknown method: {method}", "supported_methods": ["health", "gpu.status", "state.get", "task.add", "task.clear", "heartbeat", "task.list"]}
-            
-            # Send JSON-RPC response
-            self.send_response(200)
-            self.send_header('Content-Type', 'application/json')
-            self.end_headers()
-            
-            if request_id is not None:
-                response = {"jsonrpc": "2.0", "result": result, "id": request_id}
-            else:
-                response = {"jsonrpc": "2.0", "result": result}
-            
-            self.wfile.write(json.dumps(response).encode())
-        
-        except json.JSONDecodeError as e:
-            self._send_error(400, {"jsonrpc": "2.0", "error": {"code": -32701, "message": "Invalid Request", "data": f"JSON decode error: {str(e)}"}, "id": request_id})
-        except Exception as e:
-            self._send_error(500, {"jsonrpc": "2.0", "error": {"code": -32603, "message": "Internal Error", "data": str(e)}, "id": request_id})
-    
-    def do_GET(self):
-        parsed = urlparse(self.path)
-        
-        if parsed.path == '/health':
-            state = load_state()
-            self.send_response(200)
-            self.send_header('Content-Type', 'application/json')
-            self.end_headers()
-            response = {"jsonrpc": "2.0", "result": {"status": "ok", "heartbeat_count": state.get("heartbeat_count", 0), "version": "1.0.0"}, "id": 1}
-            self.wfile.write(json.dumps(response).encode())
-        
-        elif parsed.path == '/info':
-            self.send_response(200)
-            self.send_header('Content-Type', 'text/plain')
-            self.end_headers()
-            response = (
-                "Dr. Stynx OS JSON-RPC Server v1.0.0\n"
-                "=======================================\n"
-                "Supported Methods:\n"
-                "  health - Check server status\n"
-                "  gpu.status - Get GPU stats\n"
-                "  state.get - Get internal state\n"
-                "  task.add <desc> <priority> - Add a task\n"
-                "  task.clear - Clear all tasks\n"
-                "  heartbeat - Self-awareness ping\n"
-                "  task.list - List all tasks\n"
-            )
-            self.wfile.write(response.encode())
-        
-        else:
-            self.send_response(404)
-            self.end_headers()
 
 class WebSocketStreamingServer:
     """WebSocket server for streaming GPU updates and state changes"""
@@ -292,27 +284,6 @@ def main():
     print(f"🚀 Dr. Stynx OS Server starting...")
     print(f"   📡 JSON-RPC HTTP: {args.host}:{args.port}")
     print(f"   🔌 WebSocket Stream: {args.host}:{args.stream_port}")
-    print(f"\nSupported JSON-RPC Methods:")
-    print("   POST health - Get server health")
-    print("   POST gpu.status - Get GPU stats (parsing nvidia-smi)")
-    print("   POST state.get - Get internal state")
-    print("   POST task.add <description> [priority] - Add a task")
-    print("   POST task.clear - Clear all tasks")
-    print("   POST heartbeat - Trigger self-awareness")
-    print("   POST task.list - List all tasks")
-    print("\nHTTP Request Format (JSON-RPC 2.0):")
-    print(json.dumps({
-        "jsonrpc": "2.0",
-        "method": "gpu.status",
-        "params": {},
-        "id": None
-    }, indent=2))
-    
-    try:
-        while True:
-            time.sleep(1)
-    except KeyboardInterrupt:
-        print("\n🛑 Dr. Stynx OS Server stopped")
 
 if __name__ == "__main__":
     main()
