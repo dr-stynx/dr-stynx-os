@@ -1,0 +1,18 @@
+[project]
+name = "dr-stynx-os"
+version = "0.1.0"
+description = "MCP server for Dr. Stynx self-awareness, GPU monitoring, and task orchestration"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "mcp>=1.0.0",
+    "pynvml>=11.5.0",
+    "pydantic>=2.0.0"
+]
+
+[project.scripts]
+dr-stynx-os = "dr_stynx_os.server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
