@@ -27,7 +27,7 @@ show_status() {
     echo ""
     echo "=== Listening Ports ==="
     netstat -tlnp 2>/dev/null | grep -E ":808[0-9]" | head -3 || \
-    lsof -i :8080 -i :8081 2>/dev/null | head -5 || \
+    lsof -i :8111 -i :8111 2>/dev/null | head -5 || \
     echo "(Use netstat or lsof to check ports)"
     
     # Check if installed

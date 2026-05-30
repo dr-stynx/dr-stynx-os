@@ -273,8 +273,8 @@ def main():
     
     parser = argparse.ArgumentParser(description="Dr. Stynx OS Server")
     parser.add_argument('--host', default='localhost', help='Host to bind')
-    parser.add_argument('--port', type=int, default=8080, help='HTTP port (default: 8080)')
-    parser.add_argument('--stream-port', type=int, default=8081, help='WebSocket streaming port (default: 8081)')
+    parser.add_argument('--port', type=int, default=8111, help='HTTP port (default: 8111)')
+    parser.add_argument('--stream-port', type=int, default=8222, help='WebSocket streaming port (default: 8222)')
     
     args = parser.parse_args()
     

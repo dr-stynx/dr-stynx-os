@@ -15,7 +15,7 @@
 │         ↓                               │
 │ ┌─────────────────────────────────────┐ │
 │ │  Dr. Stynx Docker VM                │ │ ← YOUR AI ASSISTANT
-│ │  (localhost:8080/8000/etc)          │ │   with MCP computer-use
+│ │  (localhost:8111/8000/etc)          │ │   with MCP computer-use
 │ │  • GPU Monitoring                   │ │
 │  • Heartbeat Loops                    │ │
 │  • Task Orchestration                 │ │
@@ -77,12 +77,12 @@ dr-stynx-os-http --host 0.0.0.0 --port 8080 &
 
 ```bash
 # Get GPU status (for Metatron integration)
-curl -X POST "http://YOUR_HOST:8080/" \
+curl -X POST "http://YOUR_HOST:8111/" \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","method":"gpu.status","params":{},"id":1}'
 
 # Add task to queue
-curl -X POST "http://YOUR_HOST:8080/" \
+curl -X POST "http://YOUR_HOST:8111/" \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc":"2.0",
@@ -92,7 +92,7 @@ curl -X POST "http://YOUR_HOST:8080/" \
   }'
 
 # Get heartbeat
-curl -X POST "http://YOUR_HOST:8080/" \
+curl -X POST "http://YOUR_HOST:8111/" \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","method":"heartbeat","params":{},"id":1}'
 ```
@@ -136,7 +136,7 @@ python3 src/dr_stynx_os/http_server.py \
 import requests
 
 def get_gpu_stats(host="YOUR_HOST"):
-    url = f"http://{host}:8080/"
+    url = f"http://{host}:8111/"
     payload = {
         "jsonrpc": "2.0",
         "method": "gpu.status",
@@ -170,7 +170,7 @@ python3 src/dr_stynx_os/http_server.py --port 8082
 ### API Calls Failing
 ```bash
 # Test direct connectivity
-curl http://YOUR_HOST:8080/health
+curl http://YOUR_HOST:8111/health
 
 # Check firewall rules
 sudo ufw allow 8080/tcp
@@ -190,7 +190,7 @@ python3 src/dr_stynx_os/http_server.py \
   --stream-port 8081 &
 
 # Connect using WebSocket client
-wsconnect -H YOUR_HOST:8081/subscribe.gpu
+wsconnect -H YOUR_HOST:8111/subscribe.gpu
 ```
 
 ## Summary

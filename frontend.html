@@ -121,8 +121,8 @@
             
             <div style="background:rgba(255,255,255,0.05); padding:1rem; border-radius:8px;">
                 <strong>📡 API Endpoints:</strong><br>
-                • JSON-RPC HTTP: http://localhost:8080/<br>
-                • WebSocket Stream: ws://localhost:8081/
+                • JSON-RPC HTTP: http://localhost:8111/<br>
+                • WebSocket Stream: ws://localhost:8222/
             </div>
             
             <div style="background:rgba(0,242,96,0.1); padding:1rem; border-radius:8px; margin-top:1rem;">
@@ -149,7 +149,7 @@ Example Request:
     </div>
     
     <script>
-        const API_URL = 'http://localhost:8080/';
+        const API_URL = 'http://localhost:8111/';
         let heartbeatInterval;
         let statusTimer;
         
@@ -363,7 +363,7 @@ Example Request:
                 await checkState();
                 log('✅ Connected to Dr. Stynx OS API');
             } else {
-                log('⚠️ Could not connect to API at http://localhost:8080/');
+                log('⚠️ Could not connect to API at http://localhost:8111/');
                 log('Make sure the HTTP server is running: dr-stynx-os-http');
             }
         }, 1000);

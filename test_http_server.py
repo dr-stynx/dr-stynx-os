@@ -4,7 +4,7 @@ import json
 import urllib.request
 import sys
 
-BASE_URL = "http://localhost:8080"
+BASE_URL = "http://localhost:8111"
 
 def make_request(method, params=None):
     payload = json.dumps({

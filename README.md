@@ -22,14 +22,14 @@ dr-stynx-os        # Stdio transport for LLM clients
 **For External Access** (use with port mapping if running in Docker):
 ```bash
 # Start with accessible ports
-dr-stynx-os-http --host localhost --port 8080 --stream-port 8081
+dr-stynx-os-http --host localhost --port 8111 --stream-port 8222
 
 # OR start on different ports if needed:
-dr-stynx-os-http --host 0.0.0.0 --port 8080 --stream-port 8081
+dr-stynx-os-http --host 0.0.0.0 --port 8111 --stream-port 8222
 ```
 
-**Access via HTTP**: `http://localhost:8080/`  
-**WebSocket Streaming**: `ws://localhost:8081/`  
+**Access via HTTP**: `http://localhost:8111/`  
+**WebSocket Streaming**: `ws://localhost:8222/`  
 **HTML Dashboard**: `http://localhost:8000/frontend.html`
 
 ## JSON-RPC Methods (HTTP)
@@ -59,7 +59,7 @@ All endpoints use **JSON-RPC 2.0** protocol. Example request:
 
 ## WebSocket Streaming (WebSockets)
 
-Connect to `ws://localhost:8081/` for real-time GPU updates and state changes. The server will broadcast:
+Connect to `ws://localhost:8222/` for real-time GPU updates and state changes. The server will broadcast:
 
 - `gpu.update` - GPU status changes
 - `heartbeat.ping` - Regular pings
@@ -77,16 +77,16 @@ dr-stynx-os
 ### Using JSON-RPC HTTP
 
 ```bash
-# Start the server on localhost:8080
+# Start the server on localhost:8111
 dr-stynx-os-http --host localhost --port 8080 &
 
 # Check GPU status
-curl -X POST http://localhost:8080 \
+curl -X POST http://localhost:8111 \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","method":"gpu.status","params":{}}'
 
 # Add a task
-curl -X POST http://localhost:8080 \
+curl -X POST http://localhost:8111 \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","method":"task.add","params":{"description":"monitor metatron","priority":"high"},"id":null}'
 ```
@@ -106,7 +106,7 @@ dr-stynx-os-http-dashboard &
 
 ```bash
 # Subscribe to GPU updates (requires WebSocket client)
-curl -ws ws://localhost:8081/ \
+curl -ws ws://localhost:8222/ \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","method":"subscribe.gpu","params":{},"id":1}'
 ```
@@ -139,7 +139,7 @@ python3 -m http.server 8000 --bind 0.0.0.0 &
 check_gpu  # via MCP tool
 
 # Or via HTTP JSON-RPC
-curl -X POST http://localhost:8080 \
+curl -X POST http://localhost:8111 \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","method":"health","params":{},"id":1}'
 ```
