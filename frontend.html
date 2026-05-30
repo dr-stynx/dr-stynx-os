@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dr. Stynx OS - Dashboard</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', system-ui, sans-serif; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); color: #e8e8e8; min-height: 100vh; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 2rem; }
+        
+        header { text-align: center; margin-bottom: 3rem; }
+        h1 { font-size: 2.5rem; background: linear-gradient(90deg, #00f260, #0575e6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 0.5rem; }
+        .subtitle { color: #888; font-size: 1rem; }
+        
+        .dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 2rem; margin-bottom: 2rem; }
+        
+        .card { background: rgba(255,255,255,0.05); backdrop-filter: blur(10px); border-radius: 16px; padding: 1.5rem; border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 8px 32px rgba(0,0,0,0.3); transition: transform 0.3s ease; }
+        .card:hover { transform: translateY(-4px); }
+        .card h2 { font-size: 1.3rem; margin-bottom: 1rem; color: #00f260; display: flex; align-items: center; gap: 0.5rem; }
+        
+        .status-badge { display: inline-block; padding: 0.4rem 1rem; border-radius: 20px; font-size: 0.85rem; font-weight: 600; background: rgba(0, 242, 96, 0.2); color: #00f260; }
+        .status-badge.error { background: rgba(255, 0, 0, 0.2); color: #ff4444; }
+        
+        .gpu-stats { display: grid; gap: 0.8rem; }
+        .gpu-item { background: rgba(255,255,255,0.05); padding: 1rem; border-radius: 8px; font-size: 0.95rem; }
+        .gpu-header { display: flex; justify-content: space-between; margin-bottom: 0.5rem; font-weight: 600; }
+        .gpu-name { color: #00f260; }
+        .gpu-stats-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.5rem; font-size: 0.85rem; }
+        
+        .metric { padding: 0.5rem; background: rgba(0,0,0,0.2); border-radius: 6px; text-align: center; }
+        .metric-label { display: block; font-size: 0.75rem; color: #888; }
+        .metric-value { font-weight: 600; color: #e8e8e8; font-size: 1rem; }
+        
+        #heartbeat-timer { font-family: monospace; font-size: 2.5rem; text-align: center; padding: 1rem; background: rgba(0,242,96,0.1); border-radius: 8px; margin-bottom: 1rem; }
+        #heartbeat-counter { text-align: center; color: #00f260; font-size: 1.5rem; font-weight: 600; }
+        
+        .tasks-container { max-height: 400px; overflow-y: auto; }
+        .task-item { background: rgba(255,255,255,0.05); padding: 1rem; border-radius: 8px; margin-bottom: 0.8rem; font-size: 0.9rem; border-left: 4px solid #00f260; }
+        .task-priority { display: inline-block; padding: 0.25rem 0.75rem; border-radius: 12px; font-size: 0.75rem; margin-top: 0.5rem; }
+        .priority-high { background: rgba(255, 0, 0, 0.2); color: #ff4444; }
+        .priority-medium { background: rgba(255, 165, 0, 0.2); color: #ffa500; }
+        .priority-low { background: rgba(0, 242, 96, 0.2); color: #00f260; }
+        
+        button { cursor: pointer; padding: 0.75rem 1.5rem; border: none; border-radius: 8px; font-size: 1rem; font-weight: 600; transition: all 0.3s ease; margin: 0.25rem; }
+        .btn-primary { background: linear-gradient(90deg, #00f260, #0575e6); color: white; border: none; }
+        .btn-primary:hover { transform: scale(1.05); box-shadow: 0 4px 20px rgba(0,242,96,0.4); }
+        .btn-danger { background: rgba(255,0,0,0.2); color: #ff4444; border: 1px solid rgba(255,0,0,0.3); }
+        .btn-danger:hover { background: rgba(255,0,0,0.3); }
+        
+        .api-section { background: rgba(255,255,255,0.03); padding: 1.5rem; border-radius: 8px; margin-top: 2rem; font-family: monospace; font-size: 0.85rem; }
+        pre { background: rgba(0,0,0,0.3); padding: 1rem; border-radius: 6px; overflow-x: auto; }
+        
+        .log-container { max-height: 200px; overflow-y: auto; font-family: monospace; font-size: 0.8rem; margin-top: 1rem; padding: 0.5rem; background: rgba(0,0,0,0.3); border-radius: 6px; }
+        .log-entry { margin-bottom: 0.25rem; padding-left: 0.5rem; border-left: 3px solid #00f260; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🧠 Dr. Stynx OS</h1>
+            <p class="subtitle">AI Assistant Self-Awareness & GPU Monitoring Dashboard</p>
+        </header>
+        
+        <!-- Status Section -->
+        <div class="card" style="grid-column: 1 / -1;">
+            <h2>🟢 System Status</h2>
+            <span id="status-badge" class="status-badge">Connecting...</span>
+            
+            <div style="text-align:center; margin-top:1rem;">
+                <div id="heartbeat-timer">─ ─ ─</div>
+                <div id="heartbeat-counter">🔋 Heartbeats: 0</div>
+            </div>
+            
+            <div class="api-section" style="margin-top:1.5rem;">
+                <strong>API Status:</strong><br>
+                <span id="api-status">Connecting...</span>
+            </div>
+        </div>
+        
+        <!-- GPU Dashboard -->
+        <div class="card">
+            <h2>🖥️ GPU Monitor</h2>
+            <div id="gpu-container" class="gpu-stats">
+                <div style="text-align:center; padding:2rem; color:#888;">
+                    Loading GPU statistics...
+                </div>
+            </div>
+        </div>
+        
+        <!-- Tasks Manager -->
+        <div class="card">
+            <h2>📋 Task Queue</h2>
+            <div style="margin-bottom:1rem; display:flex; flex-wrap:wrap;">
+                <button class="btn-primary" onclick="addTask()">+ Add Task</button>
+                <button class="btn-danger" onclick="clearTasks()">Clear All</button>
+            </div>
+            <div id="tasks-container" class="tasks-container">
+                <p style="color:#888; text-align:center;">No tasks yet...</p>
+            </div>
+        </div>
+        
+        <!-- Heartbeat Monitor -->
+        <div class="card">
+            <h2>💓 Heartbeat Activity</h2>
+            <div style="margin-bottom:1rem;">
+                <button class="btn-primary" onclick="triggerHeartbeat()">🎯 Trigger Heartbeat</button>
+            </div>
+            <div id="log-container" class="log-container">
+                <div class="log-entry">Ready...</div>
+            </div>
+        </div>
+        
+        <!-- About Section -->
+        <div class="card" style="grid-column: 1 / -1;">
+            <h2>ℹ️ About Dr. Stynx OS</h2>
+            <p style="line-height:1.8; margin-bottom:1rem;">
+                Dr. Stynx OS is an AI assistant platform providing self-awareness, GPU monitoring, and task orchestration capabilities.
+                It integrates with Metatron for distributed data-oriented computing.
+            </p>
+            
+            <div style="background:rgba(255,255,255,0.05); padding:1rem; border-radius:8px;">
+                <strong>📡 API Endpoints:</strong><br>
+                • JSON-RPC HTTP: http://localhost:8080/<br>
+                • WebSocket Stream: ws://localhost:8081/
+            </div>
+            
+            <div style="background:rgba(0,242,96,0.1); padding:1rem; border-radius:8px; margin-top:1rem;">
+                <strong>✨ Features:</strong><br>
+                • Real-time GPU monitoring (NVIDIA RTX 3090)<br>
+                • Persistent state management<br>
+                • Task queue orchestration<br>
+                • Self-awareness heartbeat loops
+            </div>
+            
+            <pre style="margin-top:1rem; white-space: pre-wrap;">
+Available JSON-RPC Methods:
+  POST / - health, gpu.status, state.get, task.add, task.clear, heartbeat, task.list
+
+Example Request:
+{
+  "jsonrpc": "2.0",
+  "method": "gpu.status",
+  "params": {},
+  "id": null
+}
+            </pre>
+        </div>
+    </div>
+    
+    <script>
+        const API_URL = 'http://localhost:8080/';
+        let heartbeatInterval;
+        let statusTimer;
+        
+        async function apiCall(method, params = {}) {
+            try {
+                const payload = {
+                    jsonrpc: "2.0",
+                    method: method,
+                    params: params,
+                    id: null
+                };
+                
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(payload)
+                });
+                
+                const data = await response.json();
+                return data;
+            } catch (error) {
+                log(`API Error: ${error.message}`);
+                updateStatus('disconnected', 'Disconnected');
+                return null;
+            }
+        }
+        
+        async function checkHealth() {
+            const result = await apiCall('health');
+            if (result && result.result?.status === 'ok') {
+                document.getElementById('status-badge').textContent = '✅ Online';
+                document.getElementById('api-status').textContent = '🟢 Connected';
+                return true;
+            } else {
+                updateStatus('error', 'API Unavailable');
+                return false;
+            }
+        }
+        
+        async function checkGpu() {
+            const container = document.getElementById('gpu-container');
+            
+            try {
+                const result = await apiCall('gpu.status');
+                
+                if (result?.error) {
+                    container.innerHTML = `<div style="color:#ff6b6b; text-align:center;">⚠️ GPU Error: ${result.error}</div>`;
+                    return;
+                }
+                
+                if (!result?.gpus || result.gpus.length === 0) {
+                    container.innerHTML = '<div style="text-align:center; padding:2rem;">🖥️ No NVIDIA GPUs detected</div>';
+                    return;
+                }
+                
+                container.innerHTML = `
+                    ${result.gpus.map(gpu => `
+                        <div class="gpu-item">
+                            <div class="gpu-header">
+                                <span class="gpu-name">${gpu.name} [ID:${gpu.id}]</span>
+                            </div>
+                            <div class="gpu-stats-grid">
+                                <div class="metric">
+                                    <span class="metric-label">🌡️ Temp</span>
+                                    <span class="metric-value">${gpu.temp_c}°C</span>
+                                </div>
+                                <div class="metric">
+                                    <span class="metric-label">⚡ Usage</span>
+                                    <span class="metric-value">${gpu.gpu_util_percent}%</span>
+                                </div>
+                                <div class="metric">
+                                    <span class="metric-label">💾 VRAM Used</span>
+                                    <span class="metric-value">${formatBytes(gpu.mem_used_mb)} / ${formatBytes(gpu.mem_total_mb)}</span>
+                                </div>
+                            </div>
+                        </div>
+                    `).join('')}
+                `;
+            } catch (error) {
+                container.innerHTML = `<div style="color:#ff6b6b; text-align:center;">❌ ${error.message}</div>`;
+            }
+        }
+        
+        async function checkState() {
+            try {
+                const result = await apiCall('state.get');
+                
+                if (result?.tasks) {
+                    const container = document.getElementById('tasks-container');
+                    
+                    if (result.tasks.length === 0) {
+                        container.innerHTML = '<p style="color:#888; text-align:center;">No tasks yet...</p>';
+                        return;
+                    }
+                    
+                    container.innerHTML = `
+                        ${result.tasks.map(task => `
+                            <div class="task-item">
+                                <strong>${task.id}.</strong> ${task.description}
+                                <span class="task-priority priority-${task.priority}">${task.priority.toUpperCase()}</span>
+                                <br><small style="color:#666;">Created: ${task.created_at || 'N/A'}</small>
+                            </div>
+                        `).join('')}
+                    `;
+                }
+            } catch (error) {
+                log(`Failed to load tasks: ${error.message}`);
+            }
+        }
+        
+        async function addTask() {
+            const description = prompt('Enter task description:', 'Monitor GPU for Metatron processing');
+            if (!description) return;
+            
+            const priority = prompt('Priority (high/medium/low):', 'low')?.toLowerCase().replace(/[^a-z]/g, '') || 'low';
+            const validPriorities = ['high', 'medium', 'low'];
+            
+            while (!validPriorities.includes(priority)) {
+                priority = prompt(`Invalid priority. Enter high, medium, or low:`, 'low').toLowerCase().replace(/[^a-z]/g, '') || 'low';
+            }
+            
+            const created_at = new Date().toISOString();
+            
+            const payload = {
+                jsonrpc: "2.0",
+                method: "task.add",
+                params: { description: description, priority: priority, created_at: created_at },
+                id: null
+            };
+            
+            await fetch(API_URL, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(payload)
+            });
+            
+            log(`✅ Task added: ${description} [${priority.toUpperCase()}]`);
+            checkState();
+        }
+        
+        async function clearTasks() {
+            const confirm = confirm('Clear all tasks?');
+            if (!confirm) return;
+            
+            await apiCall('task.clear');
+            log('🧹 All tasks cleared');
+            checkState();
+        }
+        
+        async function triggerHeartbeat() {
+            const result = await apiCall('heartbeat');
+            if (result) {
+                document.getElementById('heartbeat-counter').textContent = `🔋 Heartbeats: ${result.heartbeat_count}`;
+                log(`💓 Heartbeat registered #${result.heartbeat_count} at ${result.last_heartbeat}`);
+            }
+        }
+        
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 KB';
+            const k = 1024;
+            const sizes = ['KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+        
+        function updateStatus(status, message) {
+            document.getElementById('status-badge').className = `status-badge ${status}`;
+            document.getElementById('status-badge').textContent = status === 'ok' ? '✅ Online' : message;
+        }
+        
+        function log(message) {
+            const container = document.getElementById('log-container');
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            
+            const timestamp = new Date().toLocaleTimeString();
+            entry.innerHTML = `[${timestamp}] ${message}`;
+            
+            container.insertBefore(entry, container.firstChild);
+            
+            if (container.children.length > 20) {
+                container.removeChild(container.lastChild);
+            }
+        }
+        
+        function startHeartbeatTimer() {
+            heartbeatInterval = setInterval(() => {
+                const now = new Date();
+                document.getElementById('heartbeat-timer').textContent = 
+                    `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+            }, 1000);
+        }
+        
+        async function startStatusTimer() {
+            statusTimer = setInterval(async () => {
+                await checkHealth();
+                await checkGpu();
+                await checkState();
+            }, 3000);
+        }
+        
+        // Initialize
+        log('🚀 Dr. Stynx OS Dashboard initialized');
+        startHeartbeatTimer();
+        startStatusTimer();
+        
+        setTimeout(async () => {
+            const connected = await checkHealth();
+            if (connected) {
+                await checkGpu();
+                await checkState();
+                log('✅ Connected to Dr. Stynx OS API');
+            } else {
+                log('⚠️ Could not connect to API at http://localhost:8080/');
+                log('Make sure the HTTP server is running: dr-stynx-os-http');
+            }
+        }, 1000);
+    </script>
+</body>
+</html>

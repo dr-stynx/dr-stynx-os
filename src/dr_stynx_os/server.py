@@ -1,5 +1,5 @@
 import time
-import pynvml
+import nvidia_ml_py as nvml
 from mcp.server.fastmcp import FastMCP
 from .gpu import get_gpu_stats
 from .state import load_state, save_state, update_status
@@ -13,7 +13,7 @@ def check_gpu() -> str:
     try:
         stats = get_gpu_stats()
         if not stats:
-            return "No NVIDIA GPUs detected or pynvml failed to initialize."
+            return "No NVIDIA GPUs detected or nvidia-ml-py failed to initialize."
         
         output = "🟢 GPU Status Report:\n"
         for gpu in stats:

@@ -12,6 +12,7 @@ dependencies = [
 
 [project.scripts]
 dr-stynx-os = "dr_stynx_os.server:main"
+dr-stynx-os-http = "dr_stynx_os.http_server:main"
 
 [build-system]
 requires = ["hatchling"]
