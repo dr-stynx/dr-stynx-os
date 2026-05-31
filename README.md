@@ -69,7 +69,7 @@ bash ./watchdog.sh &
 
 ## Dependencies
 
-- **Glances API**: GPU stats come from `https://glances.phaseshift.studio/api/4/gpu`
+- **Glances API**: GPU stats come from `https://glances.host.ai/api/4/gpu`
 - **mem0ai**: Persistent memory backend
 - **pynvml**: NVIDIA GPU management (fallback)
 - **mcp**: Model Context Protocol library
@@ -119,7 +119,7 @@ systemctl --user status dr-stynx-os.service
 
 ## External Access
 
-For external hosting (e.g., `dr-stynx.phaseshift.studio`):
+For external hosting (e.g., `dr-stynx.host.ai`):
 
 1. Run server bound to `0.0.0.0` (default)
 2. Set up reverse proxy (nginx/caddy) to forward to `localhost:8111`
