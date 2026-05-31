@@ -11,6 +11,8 @@
         
         header { text-align: center; margin-bottom: 3rem; }
         h1 { font-size: 2.5rem; background: linear-gradient(90deg, #00f260, #0575e6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 0.5rem; }
+        .homepage-link { color: #0575e6; text-decoration: none; font-size: 0.9rem; opacity: 0.8; transition: opacity 0.3s ease; }
+        .homepage-link:hover { opacity: 1; text-decoration: underline; }
         .subtitle { color: #888; font-size: 1rem; }
         
         .dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 2rem; margin-bottom: 2rem; }
@@ -26,7 +28,7 @@
         .gpu-item { background: rgba(255,255,255,0.05); padding: 1rem; border-radius: 8px; font-size: 0.95rem; }
         .gpu-header { display: flex; justify-content: space-between; margin-bottom: 0.5rem; font-weight: 600; }
         .gpu-name { color: #00f260; }
-        .gpu-stats-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.5rem; font-size: 0.85rem; }
+        .gpu-stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; font-size: 0.85rem; }
         
         .metric { padding: 0.5rem; background: rgba(0,0,0,0.2); border-radius: 6px; text-align: center; }
         .metric-label { display: block; font-size: 0.75rem; color: #888; }
@@ -49,17 +51,24 @@
         .btn-danger:hover { background: rgba(255,0,0,0.3); }
         
         .api-section { background: rgba(255,255,255,0.03); padding: 1.5rem; border-radius: 8px; margin-top: 2rem; font-family: monospace; font-size: 0.85rem; }
-        pre { background: rgba(0,0,0,0.3); padding: 1rem; border-radius: 6px; overflow-x: auto; }
+        pre { background: rgba(0,0,0,0.3); padding: 1rem; border-radius: 6px; overflow-x: auto; white-space: pre-wrap; }
         
         .log-container { max-height: 200px; overflow-y: auto; font-family: monospace; font-size: 0.8rem; margin-top: 1rem; padding: 0.5rem; background: rgba(0,0,0,0.3); border-radius: 6px; }
         .log-entry { margin-bottom: 0.25rem; padding-left: 0.5rem; border-left: 3px solid #00f260; }
+
+        #memory-section { margin-top: 1rem; }
+        #memory-input { width: 100%; padding: 0.75rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.3); color: #e8e8e8; font-size: 0.9rem; margin-bottom: 0.5rem; }
+        #memory-results { max-height: 300px; overflow-y: auto; }
+        .memory-item { background: rgba(255,255,255,0.05); padding: 0.75rem; border-radius: 6px; margin-bottom: 0.5rem; font-size: 0.85rem; }
+        .memory-category { color: #0575e6; font-size: 0.75rem; }
     </style>
 </head>
 <body>
     <div class="container">
         <header>
             <h1>🧠 Dr. Stynx OS</h1>
-            <p class="subtitle">AI Assistant Self-Awareness & GPU Monitoring Dashboard</p>
+            <p class="subtitle">AI Assistant Self-Awareness & MCP Dashboard</p>
+            <a class="homepage-link" href="https://dr-stynx.github.io/" target="_blank" rel="noopener">dr-stynx.github.io</a>
         </header>
         
         <!-- Status Section -->
@@ -73,8 +82,8 @@
             </div>
             
             <div class="api-section" style="margin-top:1.5rem;">
-                <strong>API Status:</strong><br>
-                <span id="api-status">Connecting...</span>
+                <strong>MCP Status:</strong><br>
+                <span id="api-status">Connecting to SSE...</span>
             </div>
         </div>
         
@@ -96,7 +105,7 @@
                 <button class="btn-danger" onclick="clearTasks()">Clear All</button>
             </div>
             <div id="tasks-container" class="tasks-container">
-                <p style="color:#888; text-align:center;">No tasks yet...</p>
+                <p style="color:#888; text-align:center;">Loading tasks...</p>
             </div>
         </div>
         
@@ -110,263 +119,450 @@
                 <div class="log-entry">Ready...</div>
             </div>
         </div>
+
+        <!-- Memory Section -->
+        <div class="card">
+            <h2>🧠 Memory</h2>
+            <div style="margin-bottom:1rem; display:flex; flex-wrap:wrap; gap:0.5rem;">
+                <button class="btn-primary" onclick="storeMemory()">+ Store</button>
+                <button class="btn-primary" onclick="searchMemories()">🔍 Search</button>
+                <button class="btn-primary" onclick="listMemories()">📋 List</button>
+                <button class="btn-primary" onclick="memoryStats()">📊 Stats</button>
+                <button class="btn-danger" onclick="clearMemories()">🧹 Clear</button>
+            </div>
+            <div id="memory-results">
+                <p style="color:#888; text-align:center;">Memory operations ready...</p>
+            </div>
+        </div>
         
         <!-- About Section -->
         <div class="card" style="grid-column: 1 / -1;">
             <h2>ℹ️ About Dr. Stynx OS</h2>
             <p style="line-height:1.8; margin-bottom:1rem;">
-                Dr. Stynx OS is an AI assistant platform providing self-awareness, GPU monitoring, and task orchestration capabilities.
-                It integrates with Metatron for distributed data-oriented computing.
+                Dr. Stynx OS is an AI assistant platform providing self-awareness, GPU monitoring, task orchestration, and semantic memory.
+                It communicates via the <strong>Model Context Protocol (MCP)</strong> over SSE.
             </p>
             
             <div style="background:rgba(255,255,255,0.05); padding:1rem; border-radius:8px;">
-                <strong>📡 API Endpoints:</strong><br>
-                • JSON-RPC HTTP: http://localhost:8111/<br>
-                • WebSocket Stream: ws://localhost:8222/
+                <strong>📡 MCP Endpoints:</strong><br>
+                • SSE Stream: <code id="sse-endpoint">/sse</code><br>
+                • Messages: <code id="msg-endpoint">/messages/</code><br>
+                • Dashboard: <code>/</code>
             </div>
             
             <div style="background:rgba(0,242,96,0.1); padding:1rem; border-radius:8px; margin-top:1rem;">
                 <strong>✨ Features:</strong><br>
-                • Real-time GPU monitoring (NVIDIA RTX 3090)<br>
+                • Real-time GPU monitoring<br>
                 • Persistent state management<br>
                 • Task queue orchestration<br>
-                • Self-awareness heartbeat loops
+                • Self-awareness heartbeat loops<br>
+                • Semantic memory (Mem0)
             </div>
             
-            <pre style="margin-top:1rem; white-space: pre-wrap;">
-Available JSON-RPC Methods:
-  POST / - health, gpu.status, state.get, task.add, task.clear, heartbeat, task.list
-
-Example Request:
-{
-  "jsonrpc": "2.0",
-  "method": "gpu.status",
-  "params": {},
-  "id": null
-}
-            </pre>
+            <pre style="margin-top:1rem;">Available MCP Tools:
+  check_gpu      — GPU stats via nvidia-smi
+  heartbeat      — Self-awareness pulse
+  get_state      — Current OS state
+  add_task       — Add to task queue
+  clear_tasks    — Clear task queue
+  memory_store   — Store a memory
+  memory_search  — Semantic memory search
+  memory_list    — List all memories
+  memory_delete  — Delete a memory
+  memory_clear   — Clear all memories
+  memory_stats   — Memory statistics
+</pre>
         </div>
     </div>
     
     <script>
-        const API_URL = 'http://localhost:8111/';
-        let heartbeatInterval;
-        let statusTimer;
-        
-        async function apiCall(method, params = {}) {
-            try {
-                const payload = {
-                    jsonrpc: "2.0",
+        // MCP SSE Client — talks to the Dr. Stynx OS MCP server
+        const BASE_URL = window.location.origin;
+        let sessionPromise = null;
+        let requestCounter = 0;
+        const pendingRequests = new Map();
+        let eventSource = null;
+        let isConnected = false;
+
+        // ---- MCP SSE Protocol ----
+        let messagesUrl = null;  // Will be set from SSE endpoint event
+
+        function connectMCP() {
+            if (sessionPromise) return sessionPromise;
+            
+            sessionPromise = new Promise((resolve, reject) => {
+                eventSource = new EventSource(`${BASE_URL}/sse`);
+                
+                // Capture the messages endpoint from the SSE 'endpoint' event
+                eventSource.addEventListener('endpoint', (event) => {
+                    messagesUrl = `${BASE_URL}${event.data}`;
+                    log(`✅ MCP session → ${messagesUrl}`);
+                });
+
+                eventSource.onmessage = (event) => {
+                    try {
+                        const msg = JSON.parse(event.data);
+                        const pending = pendingRequests.get(msg.id);
+                        if (pending) {
+                            pendingRequests.delete(msg.id);
+                            if (msg.error) {
+                                pending.reject(new Error(msg.error.message));
+                            } else {
+                                pending.resolve(msg.result);
+                            }
+                        }
+                    } catch(e) { /* ignore parse errors */ }
+                };
+
+                eventSource.onerror = (err) => {
+                    if (!isConnected) {
+                        reject(new Error('SSE connection failed'));
+                    }
+                    eventSource.close();
+                    eventSource = null;
+                };
+
+                // Wait for endpoint event, then initialize
+                setTimeout(async () => {
+                    if (!messagesUrl) {
+                        reject(new Error('No messages endpoint received'));
+                        return;
+                    }
+                    try {
+                        updateStatus('ok', '✅ Online');
+                        document.getElementById('api-status').textContent = '🟢 MCP Connected';
+                        isConnected = true;
+                        
+                        await mcpRequest('initialize', {
+                            protocolVersion: '2024-11-05',
+                            capabilities: {},
+                            clientInfo: { name: 'dashboard', version: '1.0.0' }
+                        });
+                        mcpNotify('notifications/initialized', {});
+                        resolve();
+                    } catch(e) {
+                        reject(e);
+                    }
+                }, 1000);
+            });
+
+            return sessionPromise;
+        }
+
+        function mcpRequest(method, params = {}) {
+            return new Promise((resolve, reject) => {
+                if (!messagesUrl) {
+                    reject(new Error('No messages endpoint — waiting for SSE session'));
+                    return;
+                }
+                const id = ++requestCounter;
+                const msg = {
+                    jsonrpc: '2.0',
+                    id: id,
                     method: method,
-                    params: params,
-                    id: null
+                    params: params
                 };
                 
-                const response = await fetch(API_URL, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify(payload)
-                });
+                pendingRequests.set(id, { resolve, reject });
                 
-                const data = await response.json();
-                return data;
-            } catch (error) {
-                log(`API Error: ${error.message}`);
-                updateStatus('disconnected', 'Disconnected');
+                fetch(messagesUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(msg)
+                }).catch(err => {
+                    pendingRequests.delete(id);
+                    reject(err);
+                });
+
+                setTimeout(() => {
+                    if (pendingRequests.has(id)) {
+                        pendingRequests.delete(id);
+                        reject(new Error('Request timeout'));
+                    }
+                }, 15000);
+            });
+        }
+
+        function mcpNotify(method, params = {}) {
+            if (!messagesUrl) return;
+            fetch(messagesUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    jsonrpc: '2.0',
+                    method: method,
+                    params: params
+                })
+            }).catch(() => {});
+        }
+
+        // ---- Tool Calls ----
+
+        async function callTool(name, args = {}) {
+            try {
+                const result = await mcpRequest('tools/call', {
+                    name: name,
+                    arguments: args
+                });
+                // MCP returns content array, extract text
+                if (result && result.content) {
+                    return result.content.map(c => c.text || '').join('\n');
+                }
+                return JSON.stringify(result);
+            } catch (e) {
+                log(`❌ Tool ${name} failed: ${e.message}`);
                 return null;
             }
         }
-        
+
+        // ---- Dashboard Functions ----
+
         async function checkHealth() {
-            const result = await apiCall('health');
-            if (result && result.result?.status === 'ok') {
-                document.getElementById('status-badge').textContent = '✅ Online';
-                document.getElementById('api-status').textContent = '🟢 Connected';
+            const result = await callTool('heartbeat', {});
+            if (result) {
+                // Parse heartbeat response
+                const hbMatch = result.match(/Heartbeat (\d+)/);
+                const count = hbMatch ? hbMatch[1] : '?';
+                document.getElementById('heartbeat-counter').textContent = `🔋 Heartbeats: ${count}`;
                 return true;
-            } else {
-                updateStatus('error', 'API Unavailable');
-                return false;
             }
+            return false;
         }
-        
+
         async function checkGpu() {
             const container = document.getElementById('gpu-container');
+            const result = await callTool('check_gpu', {});
             
-            try {
-                const result = await apiCall('gpu.status');
-                
-                if (result?.error) {
-                    container.innerHTML = `<div style="color:#ff6b6b; text-align:center;">⚠️ GPU Error: ${result.error}</div>`;
-                    return;
+            if (!result) {
+                container.innerHTML = '<div style="color:#ff6b6b; text-align:center;">❌ GPU check failed</div>';
+                return;
+            }
+
+            // Parse the text output into GPU cards
+            const lines = result.split('\n').filter(l => l.trim());
+            const gpuBlocks = [];
+            let current = null;
+
+            for (const line of lines) {
+                const gpuMatch = line.match(/•\s*(.+?)\s*\[ID:(\d+)\]/);
+                if (gpuMatch) {
+                    if (current) gpuBlocks.push(current);
+                    current = { name: gpuMatch[1], id: gpuMatch[2], stats: {} };
+                } else if (current) {
+                    const tempMatch = line.match(/Temp:\s*(\d+°C)/);
+                    const utilMatch = line.match(/Usage:\s*(\d+)%/);
+                    const vramMatch = line.match(/VRAM:\s*([\d.]+)\s*\/\s*([\d.]+)\s*MB/);
+                    if (tempMatch) current.stats.temp = tempMatch[1];
+                    if (utilMatch) current.stats.util = utilMatch[1];
+                    if (vramMatch) current.stats.vram = `${vramMatch[1]} / ${vramMatch[2]} MB`;
                 }
-                
-                if (!result?.gpus || result.gpus.length === 0) {
-                    container.innerHTML = '<div style="text-align:center; padding:2rem;">🖥️ No NVIDIA GPUs detected</div>';
-                    return;
-                }
-                
-                container.innerHTML = `
-                    ${result.gpus.map(gpu => `
-                        <div class="gpu-item">
-                            <div class="gpu-header">
-                                <span class="gpu-name">${gpu.name} [ID:${gpu.id}]</span>
-                            </div>
-                            <div class="gpu-stats-grid">
-                                <div class="metric">
-                                    <span class="metric-label">🌡️ Temp</span>
-                                    <span class="metric-value">${gpu.temp_c}°C</span>
-                                </div>
-                                <div class="metric">
-                                    <span class="metric-label">⚡ Usage</span>
-                                    <span class="metric-value">${gpu.gpu_util_percent}%</span>
-                                </div>
-                                <div class="metric">
-                                    <span class="metric-label">💾 VRAM Used</span>
-                                    <span class="metric-value">${formatBytes(gpu.mem_used_mb)} / ${formatBytes(gpu.mem_total_mb)}</span>
-                                </div>
-                            </div>
+            }
+            if (current) gpuBlocks.push(current);
+
+            if (gpuBlocks.length === 0) {
+                container.innerHTML = `<div style="text-align:center; padding:1rem; white-space:pre-wrap;">${result}</div>`;
+                return;
+            }
+
+            container.innerHTML = gpuBlocks.map(gpu => `
+                <div class="gpu-item">
+                    <div class="gpu-header">
+                        <span class="gpu-name">${gpu.name} [ID:${gpu.id}]</span>
+                    </div>
+                    <div class="gpu-stats-grid">
+                        <div class="metric">
+                            <span class="metric-label">🌡️ Temp</span>
+                            <span class="metric-value">${gpu.stats.temp || 'N/A'}</span>
                         </div>
-                    `).join('')}
-                `;
-            } catch (error) {
-                container.innerHTML = `<div style="color:#ff6b6b; text-align:center;">❌ ${error.message}</div>`;
-            }
+                        <div class="metric">
+                            <span class="metric-label">⚡ Usage</span>
+                            <span class="metric-value">${gpu.stats.util || 'N/A'}</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">💾 VRAM</span>
+                            <span class="metric-value">${gpu.stats.vram || 'N/A'}</span>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
         }
-        
+
         async function checkState() {
+            const container = document.getElementById('tasks-container');
+            const result = await callTool('get_state', {});
+            
+            if (!result) {
+                container.innerHTML = '<p style="color:#888; text-align:center;">Failed to load state</p>';
+                return;
+            }
+
+            // Parse tasks from state dict string
             try {
-                const result = await apiCall('state.get');
-                
-                if (result?.tasks) {
-                    const container = document.getElementById('tasks-container');
-                    
-                    if (result.tasks.length === 0) {
-                        container.innerHTML = '<p style="color:#888; text-align:center;">No tasks yet...</p>';
-                        return;
-                    }
-                    
-                    container.innerHTML = `
-                        ${result.tasks.map(task => `
-                            <div class="task-item">
-                                <strong>${task.id}.</strong> ${task.description}
-                                <span class="task-priority priority-${task.priority}">${task.priority.toUpperCase()}</span>
-                                <br><small style="color:#666;">Created: ${task.created_at || 'N/A'}</small>
-                            </div>
-                        `).join('')}
-                    `;
+                // Extract tasks list from the state output
+                const tasksMatch = result.match(/\[([^\]]*)\]/s);
+                if (!tasksMatch) {
+                    container.innerHTML = `<pre style="font-size:0.8rem; white-space:pre-wrap;">${result}</pre>`;
+                    return;
                 }
-            } catch (error) {
-                log(`Failed to load tasks: ${error.message}`);
+
+                // Try to parse tasks
+                const tasksStr = tasksMatch[0];
+                if (tasksStr.trim() === '') {
+                    container.innerHTML = '<p style="color:#888; text-align:center;">No tasks yet...</p>';
+                    return;
+                }
+
+                // Simple display of the raw state
+                container.innerHTML = `<pre style="font-size:0.8rem; white-space:pre-wrap; color:#ccc;">${result}</pre>`;
+            } catch (e) {
+                container.innerHTML = `<pre style="font-size:0.8rem; white-space:pre-wrap;">${result}</pre>`;
             }
         }
-        
+
         async function addTask() {
-            const description = prompt('Enter task description:', 'Monitor GPU for Metatron processing');
+            const description = prompt('Enter task description:', 'Monitor GPU for processing');
             if (!description) return;
             
             const priority = prompt('Priority (high/medium/low):', 'low')?.toLowerCase().replace(/[^a-z]/g, '') || 'low';
-            const validPriorities = ['high', 'medium', 'low'];
             
-            while (!validPriorities.includes(priority)) {
-                priority = prompt(`Invalid priority. Enter high, medium, or low:`, 'low').toLowerCase().replace(/[^a-z]/g, '') || 'low';
-            }
-            
-            const created_at = new Date().toISOString();
-            
-            const payload = {
-                jsonrpc: "2.0",
-                method: "task.add",
-                params: { description: description, priority: priority, created_at: created_at },
-                id: null
-            };
-            
-            await fetch(API_URL, {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify(payload)
-            });
-            
-            log(`✅ Task added: ${description} [${priority.toUpperCase()}]`);
-            checkState();
-        }
-        
-        async function clearTasks() {
-            const confirm = confirm('Clear all tasks?');
-            if (!confirm) return;
-            
-            await apiCall('task.clear');
-            log('🧹 All tasks cleared');
-            checkState();
-        }
-        
-        async function triggerHeartbeat() {
-            const result = await apiCall('heartbeat');
+            const result = await callTool('add_task', { description, priority });
             if (result) {
-                document.getElementById('heartbeat-counter').textContent = `🔋 Heartbeats: ${result.heartbeat_count}`;
-                log(`💓 Heartbeat registered #${result.heartbeat_count} at ${result.last_heartbeat}`);
+                log(`✅ ${result}`);
+                await checkState();
             }
         }
-        
-        function formatBytes(bytes) {
-            if (bytes === 0) return '0 KB';
-            const k = 1024;
-            const sizes = ['KB', 'MB', 'GB'];
-            const i = Math.floor(Math.log(bytes) / Math.log(k));
-            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+
+        async function clearTasks() {
+            if (!confirm('Clear all tasks?')) return;
+            
+            const result = await callTool('clear_tasks', {});
+            if (result) {
+                log(`🧹 ${result}`);
+                await checkState();
+            }
         }
-        
+
+        async function triggerHeartbeat() {
+            const result = await callTool('heartbeat', {});
+            if (result) {
+                const lines = result.split('\n');
+                document.getElementById('heartbeat-counter').textContent = lines[0]?.replace('💓', '🔋').trim();
+                log(`💓 Heartbeat triggered`);
+            }
+        }
+
+        // ---- Memory Functions ----
+
+        async function storeMemory() {
+            const text = prompt('Memory to store:', 'Important decision about project architecture');
+            if (!text) return;
+            
+            const category = prompt('Category (general/project/debugging/decision/preference):', 'general')?.toLowerCase() || 'general';
+            const tags = prompt('Tags (comma-separated, optional):', '');
+            
+            const result = await callTool('memory_store', { text, category, tags: tags || null });
+            if (result) {
+                log(`✅ ${result}`);
+                document.getElementById('memory-results').innerHTML = `<div class="memory-item">${result}</div>`;
+            }
+        }
+
+        async function searchMemories() {
+            const query = prompt('Search query:', 'architecture decisions');
+            if (!query) return;
+            
+            const result = await callTool('memory_search', { query, limit: 5 });
+            if (result) {
+                log(`🔍 Searched: ${query}`);
+                document.getElementById('memory-results').innerHTML = `<pre style="font-size:0.85rem; white-space:pre-wrap;">${result}</pre>`;
+            }
+        }
+
+        async function listMemories() {
+            const result = await callTool('memory_list', { limit: 20 });
+            if (result) {
+                log(`📋 Listed memories`);
+                document.getElementById('memory-results').innerHTML = `<pre style="font-size:0.85rem; white-space:pre-wrap;">${result}</pre>`;
+            }
+        }
+
+        async function memoryStats() {
+            const result = await callTool('memory_stats', {});
+            if (result) {
+                log(`📊 Memory stats`);
+                document.getElementById('memory-results').innerHTML = `<pre style="font-size:0.85rem; white-space:pre-wrap;">${result}</pre>`;
+            }
+        }
+
+        async function clearMemories() {
+            if (!confirm('Clear ALL memories? This cannot be undone.')) return;
+            const result = await callTool('memory_clear', {});
+            if (result) {
+                log(`🧹 ${result}`);
+                document.getElementById('memory-results').innerHTML = `<div class="memory-item">${result}</div>`;
+            }
+        }
+
+        // ---- Utilities ----
+
         function updateStatus(status, message) {
-            document.getElementById('status-badge').className = `status-badge ${status}`;
-            document.getElementById('status-badge').textContent = status === 'ok' ? '✅ Online' : message;
+            const badge = document.getElementById('status-badge');
+            badge.className = `status-badge ${status === 'ok' ? '' : 'error'}`;
+            badge.textContent = message;
         }
-        
+
         function log(message) {
             const container = document.getElementById('log-container');
             const entry = document.createElement('div');
             entry.className = 'log-entry';
-            
             const timestamp = new Date().toLocaleTimeString();
             entry.innerHTML = `[${timestamp}] ${message}`;
-            
             container.insertBefore(entry, container.firstChild);
-            
             if (container.children.length > 20) {
                 container.removeChild(container.lastChild);
             }
         }
-        
-        function startHeartbeatTimer() {
-            heartbeatInterval = setInterval(() => {
+
+        function startClock() {
+            setInterval(() => {
                 const now = new Date();
                 document.getElementById('heartbeat-timer').textContent = 
                     `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
             }, 1000);
         }
-        
-        async function startStatusTimer() {
-            statusTimer = setInterval(async () => {
+
+        // ---- Initialize ----
+
+        async function init() {
+            log('🚀 Dr. Stynx OS Dashboard initializing...');
+            startClock();
+
+            try {
+                await connectMCP();
+                log('✅ MCP session connected');
+
+                // Initial data load
                 await checkHealth();
                 await checkGpu();
                 await checkState();
-            }, 3000);
-        }
-        
-        // Initialize
-        log('🚀 Dr. Stynx OS Dashboard initialized');
-        startHeartbeatTimer();
-        startStatusTimer();
-        
-        setTimeout(async () => {
-            const connected = await checkHealth();
-            if (connected) {
-                await checkGpu();
-                await checkState();
-                log('✅ Connected to Dr. Stynx OS API');
-            } else {
-                log('⚠️ Could not connect to API at http://localhost:8111/');
-                log('Make sure the HTTP server is running: dr-stynx-os-http');
+
+                // Polling for updates
+                setInterval(async () => {
+                    await checkGpu();
+                }, 5000);
+
+                setInterval(async () => {
+                    await checkState();
+                }, 10000);
+
+            } catch (e) {
+                log(`❌ Connection failed: ${e.message}`);
+                updateStatus('error', '❌ MCP Offline');
+                document.getElementById('api-status').textContent = '🔴 Disconnected';
             }
-        }, 1000);
+        }
+
+        init();
     </script>
 </body>
 </html>
