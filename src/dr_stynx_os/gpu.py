@@ -1,50 +1,43 @@
-import subprocess
+import requests
+import json
 from typing import List, Dict, Any
 
+GLANCES_API_URL = "https://glances.phaseshift.studio/api/4/gpu"
+
 def get_gpu_stats() -> List[Dict[str, Any]]:
-    """Get GPU stats by parsing nvidia-smi output"""
+    """Get GPU stats from Glances REST API"""
     stats = []
     try:
-        result = subprocess.run(
-            ["nvidia-smi", "--query-gpu=name,index,temperature.gpu,memory.total,memory.used,utilization.gpu,processes.pid,processes.name", "--format=csv,noheader"],
-            capture_output=True, text=True, timeout=5
-        )
+        response = requests.get(GLANCES_API_URL, timeout=5)
+        response.raise_for_status()
         
-        if result.returncode != 0:
-            return [{"error": f"nvidia-smi failed: {result.stderr}"}]
+        gpu_data = response.json()
+        if not isinstance(gpu_data, list):
+            return [{"error": "Unexpected GPU data format"}]
         
-        lines = [l.strip() for l in result.stdout.strip().split("\n") if l.strip()]
-        
-        for line in lines:
-            parts = [p.strip() for p in line.split(",")]
-            if len(parts) >= 6:
-                stats.append({
-                    "id": parts[0],
-                    "name": parts[1],
-                    "temp_c": int(parts[2]),
-                    "mem_total_mb": float(parts[3].replace("MiB", "").strip()),
-                    "mem_used_mb": float(parts[4].replace("MiB", "").strip()),
-                    "gpu_util_percent": float(parts[5].rstrip("%")),
-                    "pid": [],
-                    "name_list": parts[6] if len(parts) > 6 else []
-                })
-            elif len(parts) >= 2:
-                stats.append({
-                    "id": parts[0],
-                    "name": parts[1],
-                    "temp_c": int(parts[2]) if len(parts) > 2 else 0,
-                    "mem_total_mb": float(parts[3].replace("MiB", "").strip()) if len(parts) > 3 else 0,
-                    "mem_used_mb": float(parts[4].replace("MiB", "").strip()) if len(parts) > 4 else 0,
-                    "gpu_util_percent": float(parts[5].rstrip("%")) if len(parts) > 5 else 0,
-                    "pid": [],
-                    "name_list": parts[6:] if len(parts) > 6 else []
-                })
-                
+        for gpu in gpu_data:
+            stats.append({
+                "id": gpu.get("gpu_id", "unknown"),
+                "name": gpu.get("name", "Unknown GPU"),
+                "temp_c": gpu.get("temperature", 0),
+                "mem_total_mb": None,  # Glances v4 doesn't provide total memory
+                "mem_used_mb": None,   # Glances v4 provides percentage instead
+                "mem_used_percent": gpu.get("mem", 0),
+                "gpu_util_percent": gpu.get("proc", 0),
+                "fan_speed": gpu.get("fan_speed"),
+                "pid": [],
+                "name_list": []
+            })
+            
+    except requests.exceptions.Timeout:
+        stats.append({"error": "Glances API timeout"})
+    except requests.exceptions.ConnectionError:
+        stats.append({"error": "Cannot connect to Glances API"})
     except Exception as e:
         stats.append({"error": str(e)})
     
     return stats
 
 def shutdown_gpu():
-    """Shutdown GPU (not recommended - would need nvidia-smi --gpu-reset)"""
+    """Shutdown GPU (not recommended)"""
     pass

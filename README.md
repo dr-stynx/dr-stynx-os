@@ -1,156 +1,147 @@
 # Dr. Stynx OS 🧠
 
-An **MCP (Model Context Protocol)** server providing self-awareness, GPU monitoring, and task orchestration for the Dr. Stynx AI agent.
-
-## Features
-
-- **GPU Monitor**: Real-time NVIDIA GPU stats (VRAM, Temp, Utilization) via `nvidia-smi` parsing
-- **Heartbeat**: Autonomous self-check loops with persistent state tracking
-- **State Management**: Persistent memory of current tasks and system status in `~/.dr-stynx-state.json`
-- **Task Queue**: Manage background tasks and priorities (add, list, clear)
-
-## Protocols Supported
-
-### 1. MCP Protocol (Default)
-```bash
-pip install . --break-system-packages
-dr-stynx-os        # Stdio transport for LLM clients
-```
-
-### 2. JSON-RPC HTTP Server 🌐
-
-**For External Access** (use with port mapping if running in Docker):
-```bash
-# Start with accessible ports
-dr-stynx-os-http --host localhost --port 8111 --stream-port 8222
-
-# OR start on different ports if needed:
-dr-stynx-os-http --host 0.0.0.0 --port 8111 --stream-port 8222
-```
-
-**Access via HTTP**: `http://localhost:8111/`  
-**WebSocket Streaming**: `ws://localhost:8222/`  
-**HTML Dashboard**: `http://localhost:8000/frontend.html`
-
-## JSON-RPC Methods (HTTP)
-
-All endpoints use **JSON-RPC 2.0** protocol. Example request:
-
-```json
-{
-  "jsonrpc": "2.0",
-  "method": "gpu.status",
-  "params": {},
-  "id": null
-}
-```
-
-### Available Methods
-
-| Method | Description | Response |
-|--------|-------------|----------|
-| `health` | Check server status | `{"status": "ok", "heartbeat_count": N}` |
-| `gpu.status` | Get GPU stats | `{"gpus": [{"id", "name", "temp_c", "mem_total_mb", "mem_used_mb", "gpu_util_percent"}]}` |
-| `state.get` | Get internal state | `{...state object}` |
-| `task.add`<br/>`tasks.add` | Add a task | `{"id": N, "status": "success"}` |
-| `task.clear`<br/>`tasks.clear` | Clear all tasks | `{"status": "success"}` |
-| `heartbeat` | Trigger self-awareness | `{"heartbeat_count": N, "last_heartbeat": "..."}` |
-| `task.list`<br/>`tasks.list` | List all tasks | `{...tasks array}` |
-
-## WebSocket Streaming (WebSockets)
-
-Connect to `ws://localhost:8222/` for real-time GPU updates and state changes. The server will broadcast:
-
-- `gpu.update` - GPU status changes
-- `heartbeat.ping` - Regular pings
-- `state.changed` - State modifications
-
-## Usage Examples
-
-### Using MCP Protocol (stdio)
-
-```bash
-dr-stynx-os
-# Available via any LLM client supporting MCP stdio transport
-```
-
-### Using JSON-RPC HTTP
-
-```bash
-# Start the server on localhost:8111
-dr-stynx-os-http --host localhost --port 8080 &
-
-# Check GPU status
-curl -X POST http://localhost:8111 \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","method":"gpu.status","params":{}}'
-
-# Add a task
-curl -X POST http://localhost:8111 \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","method":"task.add","params":{"description":"monitor metatron","priority":"high"},"id":null}'
-```
-
-### Using HTML Dashboard (Web Interface)
-
-Start the dashboard server:
-```bash
-python3 -m http.server 8000 --bind 0.0.0.0 &
-# OR use built-in dashboard runner:
-dr-stynx-os-http-dashboard &
-```
-
-**Access via browser**: `http://localhost:8000/frontend.html`
-
-### Using WebSocket
-
-```bash
-# Subscribe to GPU updates (requires WebSocket client)
-curl -ws ws://localhost:8222/ \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","method":"subscribe.gpu","params":{},"id":1}'
-```
+An **MCP (Model Context Protocol)** server providing self-awareness, GPU monitoring, persistent memory, and task orchestration for the Dr. Stynx AI agent.
 
 ## Architecture
 
-This server has two modes:
-
-| Mode | Protocol | Transport | Best For |
-|------|----------|-----------|----------|
-| MCP Server | JSON-RPC 2.0 | Stdio/WS | LLM clients (Claude, etc.) |
-| HTTP Server | JSON-RPC 2.0 | HTTP | Metatron integration |
-
-**Metatron Integration**: Use the `dr-stynx-os-http` binary to expose GPU monitoring and task orchestration as REST endpoints that can be called from any language via JSON-RPC protocol.
+```
+┌─────────────────────────────────────────────────┐
+│              Dr. Stynx OS Server                │
+│                                                 │
+│  ┌──────────┐  ┌──────────┐  ┌──────────────┐  │
+│  │  GPU     │  │  Tasks   │  │   Memory     │  │
+│  │ Monitor  │  │  Queue   │  │  System      │  │
+│  │ (Glances)│  │          │  │  (mem0ai)    │  │
+│  └──────────┘  └──────────┘  └──────────────┘  │
+│                                                 │
+│  Transport: SSE (Server-Sent Events)             │
+│  Port: 8111                                     │
+└─────────────────────────────────────────────────┘
+         ▲                    ▲
+         │                    │
+   MCP Client           Browser Dashboard
+   (Metaron, etc.)      (frontend.html)
+```
 
 ## Quick Start
 
 ```bash
 # Install
+cd /home/assistant/dr-stynx-os
 pip install . --break-system-packages
 
-# Run MCP server (for LLM clients)
-dr-stynx-os
+# Start server (MCP over SSE)
+python3 -m dr_stynx_os.server
 
-# OR run HTTP/JSON-RPC server + HTML Dashboard:
-dr-stynx-os-http --host localhost --port 8080 &
-python3 -m http.server 8000 --bind 0.0.0.0 &
-
-# Check GPU status via MCP tool
-check_gpu  # via MCP tool
-
-# Or via HTTP JSON-RPC
-curl -X POST http://localhost:8111 \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","method":"health","params":{},"id":1}'
+# With watchdog (auto-restart on crash)
+bash ./watchdog.sh &
 ```
 
-## Ports Summary
+**Access**: `http://<host>:8111/` (dashboard + MCP SSE endpoint at `/sse`)
 
-| Service | Port | Protocol | Purpose |
-|---------|------|----------|---------|
-| HTML Dashboard | 8000 | HTTP/HTML | Web interface (frontend.html) |
-| JSON-RPC API | 8080 | HTTP + POST | REST API for Metatron |
-| WebSocket Stream | 8081 | WebSocket | Real-time GPU updates |
+## MCP Tools (11 total)
+
+### System
+
+| Tool | Description |
+|------|-------------|
+| `check_gpu` | Real-time GPU stats (temp, VRAM, utilization) via Glances API |
+| `heartbeat` | Self-awareness check, increments heartbeat counter |
+| `get_state` | Get current internal state (tasks, heartbeats, uptime) |
+
+### Tasks
+
+| Tool | Parameters | Description |
+|------|-----------|-------------|
+| `add_task` | `description`, `priority` (low/medium/high) | Add to task queue |
+| `clear_tasks` | — | Clear all tasks |
+
+### Memory (Persistent)
+
+| Tool | Parameters | Description |
+|------|-----------|-------------|
+| `memory_store` | `text`, `category`, `tags` | Store a memory entry |
+| `memory_search` | `query`, `limit`, `category` | Search memories by query |
+| `memory_list` | `category`, `limit` | List memories, optionally filtered |
+| `memory_delete` | `memory_id` | Delete a specific memory |
+| `memory_clear` | — | Clear all memories |
+| `memory_stats` | — | Memory usage statistics |
+
+## Dependencies
+
+- **Glances API**: GPU stats come from `https://glances.phaseshift.studio/api/4/gpu`
+- **mem0ai**: Persistent memory backend
+- **pynvml**: NVIDIA GPU management (fallback)
+- **mcp**: Model Context Protocol library
+
+## Running in Production
+
+### Watchdog (Recommended)
+
+The `watchdog.sh` script monitors the server and auto-restarts on failure:
+
+```bash
+cd /home/assistant/dr-stynx-os
+bash ./watchdog.sh &
+```
+
+Features:
+- Health checks every 30 seconds
+- Auto-restart on crash or unresponsiveness
+- Log rotation at 10MB
+- Circuit breaker after 5 rapid restarts
+
+### Status Check
+
+```bash
+bash ./dr-stynx-os-status.sh
+```
+
+Shows: watchdog status, server PID, HTTP health, GPU stats.
+
+### Systemd Service (for systems with systemd)
+
+```bash
+# Copy service file
+cp ~/.config/systemd/user/dr-stynx-os.service ~/.config/systemd/user/
+
+# Enable and start
+systemctl --user daemon-reload
+systemctl --user enable --now dr-stynx-os.service
+systemctl --user status dr-stynx-os.service
+```
+
+## Ports
+
+| Port | Service | Purpose |
+|------|---------|---------|
+| 8111 | MCP Server (SSE) | Primary endpoint — dashboard + MCP tools |
+
+## External Access
+
+For external hosting (e.g., `dr-stynx.phaseshift.studio`):
+
+1. Run server bound to `0.0.0.0` (default)
+2. Set up reverse proxy (nginx/caddy) to forward to `localhost:8111`
+3. Ensure DNS points to the host
+4. The dashboard auto-detects the host from the request URL
+
+## File Structure
+
+```
+dr-stynx-os/
+├── src/dr_stynx_os/
+│   ├── server.py        # MCP server with SSE transport
+│   ├── gpu.py           # GPU monitoring (Glances API)
+│   ├── memory.py        # Persistent memory system
+│   ├── state.py         # Internal state management
+│   └── http_server.py   # Legacy HTTP server (deprecated)
+├── frontend.html        # Web dashboard
+├── watchdog.sh          # Auto-restart watchdog
+├── dr-stynx-os-status.sh  # Status check utility
+├── pyproject.toml       # Package config
+└── README.md
+```
 
 ## License
 

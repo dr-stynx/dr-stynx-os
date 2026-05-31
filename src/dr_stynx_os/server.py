@@ -50,16 +50,29 @@ def check_gpu() -> str:
         stats = get_gpu_stats()
         if not stats:
             return "No NVIDIA GPUs detected or nvidia-ml-py failed to initialize."
-        
+
         output = "🟢 GPU Status Report:\n"
         for gpu in stats:
             if "error" in gpu:
                 output += f"⚠️ Error: {gpu['error']}\n"
             else:
+                temp = gpu.get('temp_c', 'N/A')
+                util = gpu.get('gpu_util_percent', 'N/A')
+                mem_pct = gpu.get('mem_used_percent')
+                mem_used = gpu.get('mem_used_mb')
+                mem_total = gpu.get('mem_total_mb')
+
+                if mem_total is not None and mem_used is not None:
+                    vram = f"{mem_used:.1f} / {mem_total:.1f} MB"
+                elif mem_pct is not None:
+                    vram = f"{mem_pct:.1f}% used"
+                else:
+                    vram = "N/A"
+
                 output += (
                     f"• {gpu['name']} [ID:{gpu['id']}]\n"
-                    f"  🌡️ Temp: {gpu['temp_c']}°C | ⚡ Usage: {gpu['gpu_util_percent']}%\n"
-                    f"  💾 VRAM: {gpu['mem_used_mb']:.1f} / {gpu['mem_total_mb']:.1f} MB\n"
+                    f"  🌡️ Temp: {temp}°C | ⚡ Usage: {util}%\n"
+                    f"  💾 VRAM: {vram}\n"
                 )
         return output
     except Exception as e:

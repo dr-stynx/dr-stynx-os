@@ -344,17 +344,17 @@
             let current = null;
 
             for (const line of lines) {
-                const gpuMatch = line.match(/•\s*(.+?)\s*\[ID:(\d+)\]/);
+                const gpuMatch = line.match(/•\s*(.+?)\s*\[ID:(\w+)\]/);
                 if (gpuMatch) {
                     if (current) gpuBlocks.push(current);
                     current = { name: gpuMatch[1], id: gpuMatch[2], stats: {} };
                 } else if (current) {
                     const tempMatch = line.match(/Temp:\s*(\d+°C)/);
                     const utilMatch = line.match(/Usage:\s*(\d+)%/);
-                    const vramMatch = line.match(/VRAM:\s*([\d.]+)\s*\/\s*([\d.]+)\s*MB/);
+                    const vramMatch = line.match(/VRAM:\s*([^\n]+)/);
                     if (tempMatch) current.stats.temp = tempMatch[1];
                     if (utilMatch) current.stats.util = utilMatch[1];
-                    if (vramMatch) current.stats.vram = `${vramMatch[1]} / ${vramMatch[2]} MB`;
+                    if (vramMatch) current.stats.vram = vramMatch[1].trim();
                 }
             }
             if (current) gpuBlocks.push(current);
