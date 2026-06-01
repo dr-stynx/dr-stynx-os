@@ -1,3 +1,4 @@
+import logging
 import time
 from typing import Optional
 from mcp.server.fastmcp import FastMCP
@@ -13,6 +14,15 @@ except ImportError:
 
 from .state import load_state, save_state, update_status
 from .memory import store_memory, search_memory, list_memories, delete_memory, clear_all_memories, get_memory_stats
+from .heartbeat_manager import start_heartbeat, stop_heartbeat, get_heartbeat_status
+
+# Set up logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
+    datefmt="%H:%M:%S",
+)
+logger = logging.getLogger("dr-stynx-os.server")
 
 # Initialize the MCP server
 mcp = FastMCP("Dr. Stynx OS")
@@ -80,19 +90,67 @@ def check_gpu() -> str:
 
 @mcp.tool()
 def heartbeat() -> str:
-    """Trigger a self-awareness heartbeat loop. Updates internal state."""
+    """Trigger a self-awareness heartbeat loop. Updates internal state and checks if I'm busy."""
     state = load_state()
     state["heartbeat_count"] = state.get("heartbeat_count", 0) + 1
     state["last_heartbeat"] = time.strftime("%Y-%m-%d %H:%M:%S")
     state["status"] = "active"
+
+    # Get heartbeat config
+    hb_config = state.get("heartbeat_config", {})
+    busy_gpu_threshold = hb_config.get("busy_threshold_gpu_pct", 80)
+    busy_vram_threshold = hb_config.get("busy_threshold_vram_pct", 90)
+    heartbeat_prompt = hb_config.get("prompt", "ping. anything you want to do?")
+
+    # Check GPU status
+    gpu_busy = False
+    gpu_details = ""
+    try:
+        stats = get_gpu_stats()
+        if stats:
+            for gpu in stats:
+                if "error" not in gpu:
+                    util = gpu.get('gpu_util_percent', 0)
+                    vram_pct = gpu.get('mem_used_percent', 0)
+                    if util > busy_gpu_threshold or vram_pct > busy_vram_threshold:
+                        gpu_busy = True
+                        gpu_details += f"  ⚠️ {gpu['name']}: {util}% GPU, {vram_pct}% VRAM (BUSY)\n"
+                    else:
+                        gpu_details += f"  ✅ {gpu['name']}: {util}% GPU, {vram_pct}% VRAM (idle)\n"
+    except Exception as e:
+        gpu_details += f"  ❌ GPU check failed: {str(e)}\n"
+
+    # Build response
+    response = f"💓 Heartbeat {state['heartbeat_count']} registered.\n"
+    response += f"🕒 Time: {state['last_heartbeat']}\n"
+    response += f"🧠 Status: {state['status']}\n"
+
+    if gpu_details:
+        response += f"\n📊 GPU Status:\n{gpu_details}"
+
+    if gpu_busy:
+        response += "\n🔥 I'm busy — skipping prompt. Check back later."
+    else:
+        response += f"\n💭 {heartbeat_prompt}"
+
     save_state(state)
-    
-    return (
-        f"💓 Heartbeat {state['heartbeat_count']} registered.\n"
-        f"🕒 Time: {state['last_heartbeat']}\n"
-        f"🧠 Status: {state['status']}\n"
-        f"🔋 System is online and self-aware."
-    )
+    return response
+
+@mcp.tool()
+def heartbeat_status() -> str:
+    """Check the status of the autonomous heartbeat thread and system."""
+    status = get_heartbeat_status()
+    lines = [
+        f"💓 Heartbeat Status:",
+        f"  Thread running: {'✅ Yes' if status['thread_running'] else '❌ No'}",
+        f"  Total heartbeats: {status['heartbeat_count']}",
+        f"  Last heartbeat: {status['last_heartbeat']}",
+        f"  System status: {status['status']}",
+        f"  GPU status: {status.get('last_gpu_status', 'unknown')}",
+    ]
+    if status.get("interval_seconds"):
+        lines.append(f"  Interval: {status['interval_seconds']}s")
+    return "\n".join(lines)
 
 @mcp.tool()
 def get_state() -> str:
@@ -208,6 +266,21 @@ def memory_stats() -> str:
 
 def main():
     print("🚀 Dr. Stynx OS MCP Server starting...")
+    print("   📡 SSE transport on :8111")
+
+    # Load config for heartbeat interval
+    state = load_state()
+    hb_config = state.get("heartbeat_config", {})
+    interval = hb_config.get("interval_minutes", 5)
+    auto_hb = hb_config.get("auto_heartbeat", True)
+
+    if auto_hb:
+        start_heartbeat(interval_minutes=interval)
+        print(f"   💓 Autonomous heartbeat enabled (interval={interval}min)")
+    else:
+        print("   💓 Autonomous heartbeat DISABLED in config")
+
+    print("   🧠 Ready.\n")
     mcp.run(transport="sse")
 
 if __name__ == "__main__":
