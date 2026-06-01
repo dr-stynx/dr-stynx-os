@@ -14,7 +14,7 @@ except ImportError:
 
 from .state import load_state, save_state, update_status
 from .memory import store_memory, search_memory, list_memories, delete_memory, clear_all_memories, get_memory_stats
-from .heartbeat_manager import start_heartbeat, stop_heartbeat, get_heartbeat_status
+from .heartbeat_manager import start_heartbeat, stop_heartbeat, get_heartbeat_status, reload_heartbeat
 
 # Set up logging
 logging.basicConfig(
@@ -184,6 +184,124 @@ def clear_tasks() -> str:
     state["tasks"] = []
     save_state(state)
     return "🧹 Task queue cleared."
+
+@mcp.tool()
+def update_heartbeat_config(
+    interval_minutes: Optional[float] = None,
+    auto_heartbeat: Optional[bool] = None,
+    wake_up: Optional[bool] = None,
+    busy_threshold_gpu_pct: Optional[float] = None,
+    busy_threshold_vram_pct: Optional[float] = None,
+    wake_up_prompt: Optional[str] = None,
+    lm_studio_endpoint: Optional[str] = None,
+    lm_studio_model: Optional[str] = None,
+    lm_studio_max_tokens: Optional[int] = None,
+    lm_studio_temperature: Optional[float] = None,
+    lm_studio_system_prompt: Optional[str] = None,
+    restart_thread: bool = True,
+) -> str:
+    """
+    Update heartbeat and LM Studio configuration at runtime.
+
+    Only provide the fields you want to change. Omitted fields keep their current values.
+    Set restart_thread=True (default) to apply changes immediately.
+
+    Args:
+        interval_minutes: Heartbeat interval in minutes (default: 5)
+        auto_heartbeat: Enable/disable autonomous heartbeat (default: True)
+        wake_up: Call LM Studio when GPU is idle (default: True)
+        busy_threshold_gpu_pct: GPU utilization % threshold to consider "busy" (default: 80)
+        busy_threshold_vram_pct: VRAM usage % threshold to consider "busy" (default: 90)
+        wake_up_prompt: Custom prompt sent to LM Studio on wake-up
+        lm_studio_endpoint: LM Studio API endpoint URL
+        lm_studio_model: Model ID for LM Studio
+        lm_studio_max_tokens: Max tokens for LM Studio response
+        lm_studio_temperature: Temperature for LM Studio generation
+        lm_studio_system_prompt: System prompt for LM Studio
+        restart_thread: Restart heartbeat thread with new config (default: True)
+    """
+    state = load_state()
+
+    # Ensure heartbeat_config exists
+    if "heartbeat_config" not in state:
+        state["heartbeat_config"] = {}
+    hb = state["heartbeat_config"]
+
+    # Ensure lm_studio config exists
+    if "lm_studio" not in state:
+        state["lm_studio"] = {}
+    lm = state["lm_studio"]
+
+    changed = []
+
+    # Heartbeat config fields
+    if interval_minutes is not None:
+        old = hb.get("interval_minutes", 5)
+        hb["interval_minutes"] = interval_minutes
+        changed.append(f"interval: {old}min → {interval_minutes}min")
+    if auto_heartbeat is not None:
+        old = hb.get("auto_heartbeat", True)
+        hb["auto_heartbeat"] = auto_heartbeat
+        changed.append(f"auto_heartbeat: {old} → {auto_heartbeat}")
+    if wake_up is not None:
+        old = hb.get("wake_up", True)
+        hb["wake_up"] = wake_up
+        changed.append(f"wake_up: {old} → {wake_up}")
+    if busy_threshold_gpu_pct is not None:
+        old = hb.get("busy_threshold_gpu_pct", 80)
+        hb["busy_threshold_gpu_pct"] = busy_threshold_gpu_pct
+        changed.append(f"GPU threshold: {old}% → {busy_threshold_gpu_pct}%")
+    if busy_threshold_vram_pct is not None:
+        old = hb.get("busy_threshold_vram_pct", 90)
+        hb["busy_threshold_vram_pct"] = busy_threshold_vram_pct
+        changed.append(f"VRAM threshold: {old}% → {busy_threshold_vram_pct}%")
+    if wake_up_prompt is not None:
+        old = hb.get("wake_up_prompt", "ping. anything you want to do?")
+        hb["wake_up_prompt"] = wake_up_prompt
+        changed.append(f"wake_up_prompt: updated")
+
+    # LM Studio config fields
+    if lm_studio_endpoint is not None:
+        old = lm.get("endpoint", "http://lmstudio.phaseshift.studio/v1")
+        lm["endpoint"] = lm_studio_endpoint
+        changed.append(f"LM endpoint: updated")
+    if lm_studio_model is not None:
+        old = lm.get("model", "qwen/qwen3.6-27b")
+        lm["model"] = lm_studio_model
+        changed.append(f"LM model: {old} → {lm_studio_model}")
+    if lm_studio_max_tokens is not None:
+        old = lm.get("max_tokens", 1000)
+        lm["max_tokens"] = lm_studio_max_tokens
+        changed.append(f"max_tokens: {old} → {lm_studio_max_tokens}")
+    if lm_studio_temperature is not None:
+        old = lm.get("temperature", 0.6)
+        lm["temperature"] = lm_studio_temperature
+        changed.append(f"temperature: {old} → {lm_studio_temperature}")
+    if lm_studio_system_prompt is not None:
+        lm["system_prompt"] = lm_studio_system_prompt
+        changed.append(f"system_prompt: updated")
+
+    if not changed:
+        return "⚠️ No configuration fields provided. Nothing to update."
+
+    state["heartbeat_config"] = hb
+    state["lm_studio"] = lm
+    save_state(state)
+
+    result = "✅ Heartbeat config updated:\n" + "\n".join(f"  • {c}" for c in changed)
+
+    # Optionally restart the heartbeat thread
+    if restart_thread:
+        try:
+            new_status = reload_heartbeat()
+            result += f"\n\n💓 Heartbeat thread reloaded."
+            result += f"\n  Thread running: {'✅' if new_status.get('thread_running') else '❌'}"
+            result += f"\n  Interval: {new_status.get('interval_seconds', '?')}s"
+        except Exception as e:
+            result += f"\n\n⚠️ Config saved but thread reload failed: {e}"
+
+    return result
+
 
 @mcp.tool()
 def memory_store(text: str, category: str = "general", tags: Optional[str] = None) -> str:

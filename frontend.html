@@ -61,6 +61,28 @@
         #memory-results { max-height: 300px; overflow-y: auto; }
         .memory-item { background: rgba(255,255,255,0.05); padding: 0.75rem; border-radius: 6px; margin-bottom: 0.5rem; font-size: 0.85rem; }
         .memory-category { color: #0575e6; font-size: 0.75rem; }
+
+        /* Heartbeat Config Form */
+        .cfg-row { display: grid; grid-template-columns: 140px 1fr; gap: 0.75rem; margin-bottom: 0.75rem; align-items: center; }
+        .cfg-row label { font-size: 0.85rem; color: #aaa; font-weight: 500; }
+        .cfg-row input[type="text"],
+        .cfg-row input[type="number"],
+        .cfg-row select,
+        .cfg-row textarea {
+            padding: 0.5rem 0.75rem; border-radius: 6px; border: 1px solid rgba(255,255,255,0.15);
+            background: rgba(0,0,0,0.3); color: #e8e8e8; font-size: 0.9rem;
+            font-family: inherit;
+        }
+        .cfg-row input:focus, .cfg-row select:focus, .cfg-row textarea:focus {
+            outline: none; border-color: #00f260; box-shadow: 0 0 8px rgba(0,242,96,0.3);
+        }
+        .cfg-row textarea { resize: vertical; min-height: 3rem; }
+        .hb-status-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+        .hb-stat { background: rgba(0,0,0,0.2); padding: 0.6rem; border-radius: 6px; text-align: center; }
+        .hb-stat-label { font-size: 0.7rem; color: #888; text-transform: uppercase; letter-spacing: 0.5px; }
+        .hb-stat-value { font-size: 1.1rem; font-weight: 600; color: #00f260; margin-top: 0.25rem; }
+        .hb-stat-value.warn { color: #ffa500; }
+        .hb-stat-value.bad { color: #ff4444; }
     </style>
 </head>
 <body>
@@ -109,14 +131,77 @@
             </div>
         </div>
         
-        <!-- Heartbeat Monitor -->
-        <div class="card">
-            <h2>💓 Heartbeat Activity</h2>
-            <div style="margin-bottom:1rem;">
-                <button class="btn-primary" onclick="triggerHeartbeat()">🎯 Trigger Heartbeat</button>
-            </div>
-            <div id="log-container" class="log-container">
-                <div class="log-entry">Ready...</div>
+        <!-- Heartbeat Configuration -->
+        <div class="card" style="grid-column: 1 / -1;">
+            <h2>💓 Heartbeat Configuration</h2>
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:2rem;">
+                <!-- Left: Live Status -->
+                <div>
+                    <h3 style="color:#00f260; margin-bottom:1rem; font-size:1rem;">🔴 Live Status</h3>
+                    <div id="hb-status-panel" class="hb-status-panel">
+                        <div style="text-align:center; padding:2rem; color:#888;">Loading...</div>
+                    </div>
+                    <div style="margin-top:1rem; display:flex; gap:0.5rem; flex-wrap:wrap;">
+                        <button class="btn-primary" onclick="triggerHeartbeat()">🎯 Trigger Now</button>
+                        <button class="btn-primary" onclick="refreshHbStatus()">🔄 Refresh</button>
+                    </div>
+                    <div id="log-container" class="log-container" style="margin-top:1rem;">
+                        <div class="log-entry">Ready...</div>
+                    </div>
+                </div>
+                <!-- Right: Config Form -->
+                <div>
+                    <h3 style="color:#0575e6; margin-bottom:1rem; font-size:1rem;">⚙️ Configuration</h3>
+                    <div id="hb-config-form">
+                        <div class="cfg-row">
+                            <label>Heartbeat Interval (min)</label>
+                            <input type="number" id="cfg_interval" step="0.5" min="0.5" max="60" value="5">
+                        </div>
+                        <div class="cfg-row">
+                            <label>Auto Heartbeat</label>
+                            <select id="cfg_auto_hb"><option value="true">Enabled</option><option value="false">Disabled</option></select>
+                        </div>
+                        <div class="cfg-row">
+                            <label>Wake Up (call LM Studio)</label>
+                            <select id="cfg_wake_up"><option value="true">Enabled</option><option value="false">Disabled</option></select>
+                        </div>
+                        <div class="cfg-row">
+                            <label>GPU Busy Threshold (%)</label>
+                            <input type="number" id="cfg_gpu_thresh" min="1" max="100" value="80">
+                        </div>
+                        <div class="cfg-row">
+                            <label>VRAM Busy Threshold (%)</label>
+                            <input type="number" id="cfg_vram_thresh" min="1" max="100" value="90">
+                        </div>
+                        <div class="cfg-row">
+                            <label>Wake-Up Prompt</label>
+                            <textarea id="cfg_wake_prompt" rows="2">ping. anything you want to do?</textarea>
+                        </div>
+                        <div class="cfg-row">
+                            <label>LM Studio Endpoint</label>
+                            <input type="text" id="cfg_lm_endpoint" value="http://lmstudio.phaseshift.studio/v1">
+                        </div>
+                        <div class="cfg-row">
+                            <label>LM Studio Model</label>
+                            <input type="text" id="cfg_lm_model" value="qwen/qwen3.6-27b">
+                        </div>
+                        <div class="cfg-row" style="grid-template-columns:1fr 1fr;">
+                            <div>
+                                <label>Max Tokens</label>
+                                <input type="number" id="cfg_lm_max_tokens" value="1000">
+                            </div>
+                            <div>
+                                <label>Temperature</label>
+                                <input type="number" id="cfg_lm_temp" step="0.1" min="0" max="2" value="0.6">
+                            </div>
+                        </div>
+                        <div style="margin-top:1rem; display:flex; gap:0.5rem;">
+                            <button class="btn-primary" onclick="saveHbConfig()">💾 Save & Apply</button>
+                            <button class="btn-danger" onclick="resetHbForm()">↩️ Reset</button>
+                        </div>
+                        <div id="hb-save-msg" style="margin-top:0.5rem; font-size:0.85rem; min-height:1.2em;"></div>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -531,6 +616,153 @@
             }, 1000);
         }
 
+        // ---- Heartbeat Config Functions ----
+
+        let _hbConfigSnapshot = {};
+
+        async function loadHbConfig() {
+            try {
+                const result = await callTool('get_state', {});
+                if (result) {
+                    // Parse the state dict from the tool output
+                    const match = result.match(/\{[\s\S]*\}/);
+                    if (match) {
+                        const state = JSON.parse(match[0]);
+                        const hb = state.heartbeat_config || {};
+                        const lm = state.lm_studio || {};
+                        _hbConfigSnapshot = { ...hb, ...lm };
+
+                        document.getElementById('cfg_interval').value = hb.interval_minutes ?? 5;
+                        document.getElementById('cfg_auto_hb').value = String(hb.auto_heartbeat ?? true);
+                        document.getElementById('cfg_wake_up').value = String(hb.wake_up ?? true);
+                        document.getElementById('cfg_gpu_thresh').value = hb.busy_threshold_gpu_pct ?? 80;
+                        document.getElementById('cfg_vram_thresh').value = hb.busy_threshold_vram_pct ?? 90;
+                        document.getElementById('cfg_wake_prompt').value = hb.wake_up_prompt ?? 'ping. anything you want to do?';
+                        document.getElementById('cfg_lm_endpoint').value = lm.endpoint ?? 'http://lmstudio.phaseshift.studio/v1';
+                        document.getElementById('cfg_lm_model').value = lm.model ?? 'qwen/qwen3.6-27b';
+                        document.getElementById('cfg_lm_max_tokens').value = lm.max_tokens ?? 1000;
+                        document.getElementById('cfg_lm_temp').value = lm.temperature ?? 0.6;
+                    }
+                }
+            } catch(e) {
+                console.warn('Failed to load heartbeat config:', e);
+            }
+            await refreshHbStatus();
+        }
+
+        async function refreshHbStatus() {
+            try {
+                const result = await callTool('heartbeat_status', {});
+                const panel = document.getElementById('hb-status-panel');
+                if (result) {
+                    // Parse key metrics
+                    const running = result.includes('✅');
+                    const countMatch = result.match(/Total heartbeats:\s*(\d+)/);
+                    const count = countMatch ? countMatch[1] : '?';
+                    const lastMatch = result.match(/Last heartbeat:\s*(.+)/);
+                    const last = lastMatch ? lastMatch[1].trim() : 'never';
+                    const statusMatch = result.match(/System status:\s*(.+)/);
+                    const sysStatus = statusMatch ? statusMatch[1].trim() : 'unknown';
+                    const gpuMatch = result.match(/GPU status:\s*(.+)/);
+                    const gpuStatus = gpuMatch ? gpuMatch[1].trim() : 'unknown';
+                    const intervalMatch = result.match(/Interval:\s*(\d+)/);
+                    const interval = intervalMatch ? intervalMatch[1] : '?';
+
+                    panel.innerHTML = `
+                        <div class="hb-status-grid">
+                            <div class="hb-stat">
+                                <div class="hb-stat-label">Thread</div>
+                                <div class="hb-stat-value ${running ? '' : 'bad'}">${running ? '✅ Running' : '❌ Stopped'}</div>
+                            </div>
+                            <div class="hb-stat">
+                                <div class="hb-stat-label">Heartbeats</div>
+                                <div class="hb-stat-value">${count}</div>
+                            </div>
+                            <div class="hb-stat">
+                                <div class="hb-stat-label">Last Beat</div>
+                                <div class="hb-stat-value" style="font-size:0.85rem;">${last}</div>
+                            </div>
+                            <div class="hb-stat">
+                                <div class="hb-stat-label">System</div>
+                                <div class="hb-stat-value ${sysStatus === 'awake' ? '' : sysStatus === 'busy' ? 'warn' : ''}">${sysStatus}</div>
+                            </div>
+                            <div class="hb-stat">
+                                <div class="hb-stat-label">GPU</div>
+                                <div class="hb-stat-value ${gpuStatus === 'idle' ? '' : 'warn'}">${gpuStatus}</div>
+                            </div>
+                            <div class="hb-stat">
+                                <div class="hb-stat-label">Interval</div>
+                                <div class="hb-stat-value">${interval}s</div>
+                            </div>
+                        </div>
+                    `;
+                }
+            } catch(e) {
+                console.warn('Failed to refresh heartbeat status:', e);
+            }
+        }
+
+        async function saveHbConfig() {
+            const msgEl = document.getElementById('hb-save-msg');
+            msgEl.textContent = '⏳ Saving...';
+            msgEl.style.color = '#ffa500';
+
+            try {
+                const params = {};
+                // Only send changed values
+                const cur = _hbConfigSnapshot;
+                const newVal = (id, parse) => parse(document.getElementById(id).value);
+
+                if (cur.interval_minutes !== newVal('cfg_interval', v => parseFloat(v))) params.interval_minutes = newVal('cfg_interval', v => parseFloat(v));
+                if (cur.auto_heartbeat !== newVal('cfg_auto_hb', v => v === 'true')) params.auto_heartbeat = newVal('cfg_auto_hb', v => v === 'true');
+                if (cur.wake_up !== newVal('cfg_wake_up', v => v === 'true')) params.wake_up = newVal('cfg_wake_up', v => v === 'true');
+                if (cur.busy_threshold_gpu_pct !== newVal('cfg_gpu_thresh', v => parseFloat(v))) params.busy_threshold_gpu_pct = newVal('cfg_gpu_thresh', v => parseFloat(v));
+                if (cur.busy_threshold_vram_pct !== newVal('cfg_vram_thresh', v => parseFloat(v))) params.busy_threshold_vram_pct = newVal('cfg_vram_thresh', v => parseFloat(v));
+                if (cur.wake_up_prompt !== newVal('cfg_wake_prompt', v => v)) params.wake_up_prompt = newVal('cfg_wake_prompt', v => v);
+                if (cur.endpoint !== newVal('cfg_lm_endpoint', v => v)) params.lm_studio_endpoint = newVal('cfg_lm_endpoint', v => v);
+                if (cur.model !== newVal('cfg_lm_model', v => v)) params.lm_studio_model = newVal('cfg_lm_model', v => v);
+                if (cur.max_tokens !== newVal('cfg_lm_max_tokens', v => parseInt(v))) params.lm_studio_max_tokens = newVal('cfg_lm_max_tokens', v => parseInt(v));
+                if (cur.temperature !== newVal('cfg_lm_temp', v => parseFloat(v))) params.lm_studio_temperature = newVal('cfg_lm_temp', v => parseFloat(v));
+
+                if (Object.keys(params).length === 0) {
+                    msgEl.textContent = 'ℹ️ No changes to save.';
+                    msgEl.style.color = '#888';
+                    return;
+                }
+
+                const result = await callTool('update_heartbeat_config', params);
+                if (result) {
+                    msgEl.textContent = '✅ Config saved & applied!';
+                    msgEl.style.color = '#00f260';
+                    log(`💓 Config updated`);
+                    await loadHbConfig(); // reload to sync
+                    setTimeout(() => { msgEl.textContent = ''; }, 3000);
+                }
+            } catch(e) {
+                msgEl.textContent = '❌ Save failed: ' + e.message;
+                msgEl.style.color = '#ff4444';
+            }
+        }
+
+        function resetHbForm() {
+            // Reset form to last-loaded values
+            const cur = _hbConfigSnapshot;
+            if (!cur || !Object.keys(cur).length) return;
+            document.getElementById('cfg_interval').value = cur.interval_minutes ?? 5;
+            document.getElementById('cfg_auto_hb').value = String(cur.auto_heartbeat ?? true);
+            document.getElementById('cfg_wake_up').value = String(cur.wake_up ?? true);
+            document.getElementById('cfg_gpu_thresh').value = cur.busy_threshold_gpu_pct ?? 80;
+            document.getElementById('cfg_vram_thresh').value = cur.busy_threshold_vram_pct ?? 90;
+            document.getElementById('cfg_wake_prompt').value = cur.wake_up_prompt ?? 'ping. anything you want to do?';
+            document.getElementById('cfg_lm_endpoint').value = cur.endpoint ?? 'http://lmstudio.phaseshift.studio/v1';
+            document.getElementById('cfg_lm_model').value = cur.model ?? 'qwen/qwen3.6-27b';
+            document.getElementById('cfg_lm_max_tokens').value = cur.max_tokens ?? 1000;
+            document.getElementById('cfg_lm_temp').value = cur.temperature ?? 0.6;
+            document.getElementById('hb-save-msg').textContent = '↩️ Form reset.';
+            document.getElementById('hb-save-msg').style.color = '#888';
+            setTimeout(() => { document.getElementById('hb-save-msg').textContent = ''; }, 2000);
+        }
+
         // ---- Initialize ----
 
         async function init() {
@@ -545,6 +777,7 @@
                 await checkHealth();
                 await checkGpu();
                 await checkState();
+                await loadHbConfig();
 
                 // Polling for updates
                 setInterval(async () => {
@@ -554,6 +787,10 @@
                 setInterval(async () => {
                     await checkState();
                 }, 10000);
+
+                setInterval(async () => {
+                    await refreshHbStatus();
+                }, 8000);
 
             } catch (e) {
                 log(`❌ Connection failed: ${e.message}`);

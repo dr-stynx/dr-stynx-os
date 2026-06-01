@@ -32,59 +32,43 @@ logger = logging.getLogger("dr-stynx-os.heartbeat")
 # GPU check (lightweight — uses nvidia-smi via subprocess, no heavy imports)
 # ---------------------------------------------------------------------------
 
-def _check_gpu_busy(threshold_gpu_pct: float = 80.0, threshold_vram_pct: float = 90.0) -> tuple[bool, str]:
+def _check_gpu_busy(threshold_gpu_pct: float = 80.0, threshold_vram_pct: float = 90.0, glances_url: str = "https://glances.phaseshift.studio/api/4/gpu") -> tuple[bool, str]:
     """
-    Check if any GPU is above busy thresholds.
+    Check if any GPU is above busy thresholds via the Glances API.
 
     Returns:
         (is_busy: bool, details: str)
     """
     try:
-        import subprocess
-        result = subprocess.run(
-            [
-                "nvidia-smi",
-                "--query-gpu=name,utilization.gpu,memory.used,memory.total",
-                "--format=csv,noheader,nounits",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
+        resp = requests.get(glances_url, timeout=5)
+        resp.raise_for_status()
+        gpus = resp.json()
 
-        if result.returncode != 0:
-            return False, "  ❌ nvidia-smi failed (no GPU or driver issue)\n"
-
-        lines = [l.strip() for l in result.stdout.strip().split("\n") if l.strip()]
-        if not lines:
-            return False, "  ⚠️ No GPU data returned\n"
+        if not gpus or not isinstance(gpus, list):
+            return False, "  ⚠️ No GPU data from Glances API\n"
 
         busy = False
         details = ""
-        for line in lines:
-            parts = [p.strip() for p in line.split(",")]
-            if len(parts) < 4:
-                continue
-
-            name = parts[0]
-            gpu_util = float(parts[1]) if parts[1].replace(".", "").isdigit() else 0.0
-            mem_used = float(parts[2]) if parts[2].replace(".", "").isdigit() else 0.0
-            mem_total = float(parts[3]) if parts[3].replace(".", "").isdigit() else 1.0
-
-            vram_pct = (mem_used / mem_total * 100) if mem_total > 0 else 0.0
+        for gpu in gpus:
+            name = gpu.get("name", "Unknown GPU")
+            gpu_util = float(gpu.get("proc", 0))
+            vram_pct = float(gpu.get("mem", 0))
+            temp = gpu.get("temperature", "?")
 
             if gpu_util > threshold_gpu_pct or vram_pct > threshold_vram_pct:
                 busy = True
-                details += f"  ⚠️  {name}: {gpu_util:.0f}% GPU, {vram_pct:.0f}% VRAM (BUSY)\n"
+                details += f"  ⚠️  {name}: {gpu_util:.0f}% GPU, {vram_pct:.0f}% VRAM, {temp}°C (BUSY)\n"
             else:
-                details += f"  ✅ {name}: {gpu_util:.0f}% GPU, {vram_pct:.0f}% VRAM (idle)\n"
+                details += f"  ✅ {name}: {gpu_util:.0f}% GPU, {vram_pct:.0f}% VRAM, {temp}°C (idle)\n"
 
         return busy, details
 
-    except FileNotFoundError:
-        return False, "  ⚠️ nvidia-smi not found (GPU check skipped)\n"
-    except subprocess.TimeoutExpired:
-        return False, "  ❌ nvidia-smi timed out\n"
+    except requests.exceptions.ConnectionError:
+        return False, "  ❌ Glances API unreachable\n"
+    except requests.exceptions.Timeout:
+        return False, "  ❌ Glances API timed out\n"
+    except requests.exceptions.HTTPError as e:
+        return False, f"  ❌ Glances API HTTP error: {e}\n"
     except Exception as e:
         return False, f"  ❌ GPU check error: {e}\n"
 
@@ -164,11 +148,12 @@ def heartbeat_tick(state: dict) -> dict:
     wake_up = hb_config.get("wake_up", True)
     prompt = hb_config.get("prompt", "ping. anything you want to do?")
     wake_prompt = hb_config.get("wake_up_prompt", prompt)
+    glances_url = hb_config.get("glances_url", "https://glances.phaseshift.studio/api/4/gpu")
 
     logger.info(f"💓 Heartbeat #{state['heartbeat_count']} at {state['last_heartbeat']}")
 
     # --- GPU check ---
-    gpu_busy, gpu_details = _check_gpu_busy(busy_gpu_pct, busy_vram_pct)
+    gpu_busy, gpu_details = _check_gpu_busy(busy_gpu_pct, busy_vram_pct, glances_url=glances_url)
 
     log_msg = f"GPU Status:\n{gpu_details}"
     logger.info(log_msg)
@@ -341,3 +326,16 @@ def get_heartbeat_status() -> dict:
         "heartbeat_count": load_state().get("heartbeat_count", 0),
         "last_heartbeat": load_state().get("last_heartbeat", "never"),
     }
+
+
+def reload_heartbeat() -> dict:
+    """Stop old thread, load fresh config, start new thread. Returns new status."""
+    global _active_thread
+    stop_heartbeat()
+    time.sleep(0.5)  # let thread fully exit
+    state = load_state()
+    hb_config = state.get("heartbeat_config", {})
+    auto = hb_config.get("auto_heartbeat", True)
+    if auto:
+        start_heartbeat()
+    return get_heartbeat_status()
